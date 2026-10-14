@@ -1,0 +1,6 @@
+.gradle/
+build.nosync/
+build/
+local.properties
+*.apk
+.gradle.nosync/

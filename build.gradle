@@ -1,0 +1,8 @@
+plugins {
+    id "com.android.application" version "9.4.1" apply false
+}
+
+// Projekt leží v priečinku synchronizovanom cez iCloud; priečinky s koncovkou .nosync iCloud vynecháva.
+allprojects {
+    layout.buildDirectory = file("build.nosync")
+}
