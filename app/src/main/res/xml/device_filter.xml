@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zariadenia so zvukovým rozhraním (USB Audio Class), napríklad ToneX Plug. -->
+<resources>
+    <usb-device class="1" subclass="2" />
+</resources>

@@ -1,0 +1,94 @@
+package sk.lubeno.riffy;
+
+import android.content.Context;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+
+/**
+ * Poznámka, tempo, tónina a obľúbenosť riffov. Ukladá sa v súbore aplikácie podľa mena
+ * nahrávky (id v MediaStore sa po preinštalovaní mení, meno nie).
+ */
+final class Meta {
+    static final class Info {
+        String note = "", key = "";
+        int bpm;
+        boolean favorite;
+
+        boolean empty() {
+            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite;
+        }
+    }
+
+    private final File file;
+    private JSONObject all = new JSONObject();
+
+    Meta(Context c) {
+        file = new File(c.getFilesDir(), "riffy-udaje.json");
+        try (InputStream in = new FileInputStream(file)) {
+            byte[] b = new byte[(int) file.length()];
+            int n = 0;
+            while (n < b.length) {
+                int r = in.read(b, n, b.length - n);
+                if (r < 0) break;
+                n += r;
+            }
+            all = new JSONObject(new String(b, 0, n, StandardCharsets.UTF_8));
+        } catch (IOException | JSONException ignored) {
+        }
+    }
+
+    Info get(String name) {
+        Info i = new Info();
+        JSONObject o = all.optJSONObject(name);
+        if (o == null) return i;
+        i.note = o.optString("note");
+        i.key = o.optString("key");
+        i.bpm = o.optInt("bpm");
+        i.favorite = o.optBoolean("favorite");
+        return i;
+    }
+
+    void put(String name, Info i) {
+        try {
+            if (i.empty()) {
+                all.remove(name);
+            } else {
+                JSONObject o = new JSONObject();
+                o.put("note", i.note);
+                o.put("key", i.key);
+                o.put("bpm", i.bpm);
+                o.put("favorite", i.favorite);
+                all.put(name, o);
+            }
+        } catch (JSONException ignored) {
+        }
+        save();
+    }
+
+    void rename(String from, String to) {
+        Info i = get(from);
+        all.remove(from);
+        put(to, i);
+    }
+
+    void remove(String name) {
+        all.remove(name);
+        save();
+    }
+
+    private void save() {
+        try (OutputStream out = new FileOutputStream(file)) {
+            out.write(all.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (IOException ignored) {
+        }
+    }
+}

@@ -3,14 +3,20 @@ package sk.lubeno.riffy;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.PendingIntent;
 import android.app.RecoverableSecurityException;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
@@ -24,7 +30,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.MediaStore;
+import android.text.InputType;
 import android.text.format.DateFormat;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,56 +40,73 @@ import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Nahrávanie riffov z USB zvukovej karty (ToneX Plug).
  *
- * Prehliadač na Androide si vstup vybrať nevie, Android mu dá ten, ktorý uzná za vhodný
- * (na Xiaomi často vstavaný mikrofón). Tu si aplikácia USB vstup vyžiada sama
- * (setPreferredDevice) a po spustení overí, kam ju Android naozaj pripojil.
+ * Vstup sa číta stále ({@link Engine}): ukazuje úroveň, pamätá si posledných 30 sekúnd a na
+ * požiadanie zapisuje nahrávku. ToneX číta aplikácia priamo cez USB ({@link UsbAudio}),
+ * lebo zvukový systém Androidu ho na niektorých telefónoch nepustí.
  */
 public class MainActivity extends Activity {
     static final String FOLDER = Environment.DIRECTORY_MUSIC + "/Riffy/";
+    static final String SHARED = FOLDER + "Zdieľané/";
     static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2;
+    static final Metronome METRONOME = new Metronome();
+    static final ExecutorService IO = Executors.newSingleThreadExecutor();
+    static final Object COUNT_IN = new Object();
 
     final Handler ui = new Handler(Looper.getMainLooper());
+    final Engine engine = Engine.get();
     AudioManager audio;
-    Spinner inputs;
-    TextView info, status, levelText;
-    Button rec, test;
-    Spinner sourceSpin, formatSpin, channelSpin;
+    UsbManager usb;
     SharedPreferences prefs;
+    Meta meta;
+
+    Spinner inputs, sourceSpin, formatSpin, channelSpin;
+    TextView info, status, levelText, gainText, bpmText, advancedToggle;
+    Button rec, retro, test, usbInfo;
+    CheckBox metro, countIn, trim, metroPhone, favorites, screenOn;
     ProgressBar level;
+    SeekBar gainBar;
+    View advanced;
     ListView list;
 
     final List<AudioDeviceInfo> devices = new ArrayList<>();
+    /** USB zariadenia so zvukovým vstupom, ktoré aplikácia číta sama; v zozname sú prvé. */
+    final List<UsbDevice> usbDevices = new ArrayList<>();
+    final Set<String> askedUsb = new HashSet<>();
     ArrayAdapter<String> inputNames;
     final List<Riff> riffs = new ArrayList<>();
     ArrayAdapter<Riff> riffList;
 
-    volatile boolean recording, testing, monitoring;
-    Thread monitor;
-    boolean resumed;
-    Thread worker;
-    long started;
+    volatile boolean testing;
+    boolean resumed, counting;
+    float currentGain = 1f;
+    int bpm, recordingBpm;
     MediaPlayer player;
     long playing = -1;
 
@@ -89,11 +114,29 @@ public class MainActivity extends Activity {
         long id;
         String name;
         long duration, added;
+        Meta.Info info;
 
         Uri uri() {
             return ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
         }
     }
+
+    final Engine.Listener engineListener = new Engine.Listener() {
+        public void onStatus(String text) {
+            ui.post(() -> status.setText(text));
+        }
+
+        public void onLevel(int[] peak) {
+            showLevel(peak);
+        }
+
+        public void onFailed(String text) {
+            ui.post(() -> {
+                status.setText(text);
+                if (engine.recording()) finishRecording();
+            });
+        }
+    };
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -103,35 +146,133 @@ public class MainActivity extends Activity {
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             int pad = Math.round(16 * getResources().getDisplayMetrics().density);
             v.setPadding(pad + insets.getSystemWindowInsetLeft(), pad + insets.getSystemWindowInsetTop(),
-                    pad + insets.getSystemWindowInsetRight(), pad + insets.getSystemWindowInsetBottom());
+                    pad + insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
 
         audio = getSystemService(AudioManager.class);
-        inputs = findViewById(R.id.inputs);
-        info = findViewById(R.id.info);
-        status = findViewById(R.id.status);
-        rec = findViewById(R.id.rec);
-        level = findViewById(R.id.level);
-        levelText = findViewById(R.id.levelText);
-        test = findViewById(R.id.test);
+        usb = getSystemService(UsbManager.class);
         prefs = getSharedPreferences("nastavenia", MODE_PRIVATE);
-        sourceSpin = choice(R.id.source, SOURCE_NAMES, "source");
-        formatSpin = choice(R.id.format, FORMAT_NAMES, "format");
-        channelSpin = choice(R.id.channels, CHANNEL_NAMES, "channels");
-        test.setOnClickListener(v -> findSetup());
+        meta = new Meta(this);
+        UsbAudio.load();
+
         list = findViewById(R.id.list);
+        View header = getLayoutInflater().inflate(R.layout.header, list, false);
+        list.addHeaderView(header, null, false);
+        inputs = header.findViewById(R.id.inputs);
+        status = header.findViewById(R.id.status);
+        level = header.findViewById(R.id.level);
+        levelText = header.findViewById(R.id.levelText);
+        gainText = header.findViewById(R.id.gainText);
+        gainBar = header.findViewById(R.id.gain);
+        rec = header.findViewById(R.id.rec);
+        retro = header.findViewById(R.id.retro);
+        metro = header.findViewById(R.id.metro);
+        countIn = header.findViewById(R.id.countIn);
+        bpmText = header.findViewById(R.id.bpm);
+        advancedToggle = header.findViewById(R.id.advancedToggle);
+        advanced = header.findViewById(R.id.advanced);
+        trim = header.findViewById(R.id.trim);
+        metroPhone = header.findViewById(R.id.metroPhone);
+        screenOn = header.findViewById(R.id.screenOn);
+        info = header.findViewById(R.id.info);
+        test = header.findViewById(R.id.test);
+        usbInfo = header.findViewById(R.id.usbInfo);
+        favorites = header.findViewById(R.id.favorites);
+        sourceSpin = choice(header, R.id.source, SOURCE_NAMES, "source");
+        formatSpin = choice(header, R.id.format, FORMAT_NAMES, "format");
+        channelSpin = choice(header, R.id.channels, CHANNEL_NAMES, "channels");
+
+        gainBar.setMax(48);
+        gainBar.setProgress(prefs.getInt("gainDb", 0) + 24);
+        currentGain = gain();
+        showGain();
+        gainBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar b, int value, boolean user) {
+                prefs.edit().putInt("gainDb", value - 24).apply();
+                showGain();
+                currentGain = gain();
+                engine.setGain(currentGain);
+            }
+
+            public void onStartTrackingTouch(SeekBar b) {
+            }
+
+            public void onStopTrackingTouch(SeekBar b) {
+            }
+        });
+
+        rec.setOnClickListener(v -> onRecordPressed());
+        retro.setOnClickListener(v -> saveRetro());
+        retro.setText("⟲ Uložiť posledných " + Engine.HISTORY_SECONDS + " s");
+
+        bpm = prefs.getInt("bpm", 100);
+        showBpm();
+        header.findViewById(R.id.slower).setOnClickListener(v -> changeBpm(-1));
+        header.findViewById(R.id.faster).setOnClickListener(v -> changeBpm(1));
+        header.findViewById(R.id.slower).setOnLongClickListener(v -> { changeBpm(-10); return true; });
+        header.findViewById(R.id.faster).setOnLongClickListener(v -> { changeBpm(10); return true; });
+        metro.setChecked(METRONOME.running());
+        metro.setOnCheckedChangeListener((b, on) -> {
+            if (on) startMetronome();
+            else if (!counting) METRONOME.stop();
+        });
+        countIn.setChecked(prefs.getBoolean("countIn", false));
+        countIn.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("countIn", on).apply());
+        trim.setChecked(prefs.getBoolean("trim", true));
+        trim.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("trim", on).apply());
+        metroPhone.setChecked(prefs.getBoolean("metroPhone", false));
+        metroPhone.setOnCheckedChangeListener((b, on) -> {
+            prefs.edit().putBoolean("metroPhone", on).apply();
+            if (METRONOME.running()) startMetronome();
+        });
+        screenOn.setChecked(prefs.getBoolean("screenOn", true));
+        screenOn.setOnCheckedChangeListener((b, on) -> {
+            prefs.edit().putBoolean("screenOn", on).apply();
+            keepScreen(engine.recording());
+        });
+        showAdvanced(prefs.getBoolean("advanced", false));
+        advancedToggle.setOnClickListener(v -> showAdvanced(advanced.getVisibility() != View.VISIBLE));
+        favorites.setChecked(prefs.getBoolean("favorites", false));
+        favorites.setOnCheckedChangeListener((b, on) -> {
+            prefs.edit().putBoolean("favorites", on).apply();
+            loadRiffs();
+        });
+        test.setOnClickListener(v -> findSetup());
+        usbInfo.setOnClickListener(v -> usbReport());
+
+        IntentFilter plugs = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        plugs.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        BroadcastReceiver onPlug = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, Intent i) {
+                refreshInputs();
+            }
+        };
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(onPlug, plugs, Context.RECEIVER_EXPORTED);
+        else registerReceiver(onPlug, plugs);
 
         inputNames = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item);
         inputNames.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         inputs.setAdapter(inputNames);
         inputs.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) { showInfo(); startMonitor(); }
-            public void onNothingSelected(AdapterView<?> p) { showInfo(); }
+            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+                showInfo();
+                startMonitor();
+            }
+
+            public void onNothingSelected(AdapterView<?> p) {
+                showInfo();
+            }
         });
         audio.registerAudioDeviceCallback(new AudioDeviceCallback() {
-            public void onAudioDevicesAdded(AudioDeviceInfo[] added) { refreshInputs(); }
-            public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) { refreshInputs(); }
+            public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
+                refreshInputs();
+            }
+
+            public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) {
+                refreshInputs();
+            }
         }, ui);
 
         riffList = new ArrayAdapter<Riff>(this, android.R.layout.simple_list_item_2, android.R.id.text1, riffs) {
@@ -139,17 +280,27 @@ public class MainActivity extends Activity {
             public View getView(int pos, View convert, ViewGroup parent) {
                 View v = super.getView(pos, convert, parent);
                 Riff r = getItem(pos);
-                ((TextView) v.findViewById(android.R.id.text1)).setText((r.id == playing ? "▶ " : "") + r.name);
-                String when = DateFormat.format("d. M. yyyy  HH:mm", new Date(r.added * 1000)).toString();
-                ((TextView) v.findViewById(android.R.id.text2)).setText(when + "   " + clock(r.duration));
+                ((TextView) v.findViewById(android.R.id.text1)).setText(
+                        (r.info.favorite ? "★ " : "") + (r.id == playing ? "▶ " : "") + r.name);
+                StringBuilder line = new StringBuilder(DateFormat.format("d. M. yyyy  HH:mm", new Date(r.added * 1000)));
+                line.append("   ").append(clock(r.duration));
+                if (r.info.bpm > 0) line.append("   ").append(r.info.bpm).append(" BPM");
+                if (!r.info.key.isEmpty()) line.append("   ").append(r.info.key);
+                if (!r.info.note.isEmpty()) line.append("\n").append(r.info.note);
+                ((TextView) v.findViewById(android.R.id.text2)).setText(line);
                 return v;
             }
         };
         list.setAdapter(riffList);
-        list.setOnItemClickListener((p, v, pos, id) -> play(riffs.get(pos)));
-        list.setOnItemLongClickListener((p, v, pos, id) -> { options(riffs.get(pos)); return true; });
-
-        rec.setOnClickListener(v -> { if (recording) stop(); else start(); });
+        list.setOnItemClickListener((p, v, pos, id) -> {
+            Object r = p.getItemAtPosition(pos);
+            if (r instanceof Riff) play((Riff) r);
+        });
+        list.setOnItemLongClickListener((p, v, pos, id) -> {
+            Object r = p.getItemAtPosition(pos);
+            if (r instanceof Riff) options((Riff) r);
+            return true;
+        });
 
         refreshInputs();
         askPermissions();
@@ -157,22 +308,44 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // Pripojený ToneX (Android otvoril aplikáciu sám).
+        refreshInputs();
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
+        engine.listener = engineListener;
+        engine.setGain(currentGain);
+        if (engine.recording()) {
+            setBusy(true);
+            tick();
+        }
+        metro.setChecked(METRONOME.running());
         startMonitor();
     }
 
     @Override
     protected void onPause() {
         resumed = false;
-        stopMonitor();
+        // Počas nahrávania beží vstup ďalej aj pri zhasnutej obrazovke (RecordingService).
+        if (!engine.recording() && !testing) {
+            engine.stop();
+            if (!counting) {
+                METRONOME.stop();
+                metro.setChecked(false);
+            }
+            level.setProgress(0);
+            levelText.setText("");
+        }
         super.onPause();
     }
 
     @Override
     protected void onDestroy() {
-        recording = false;
         stopPlaying();
         super.onDestroy();
     }
@@ -182,6 +355,7 @@ public class MainActivity extends Activity {
         missing.add(Manifest.permission.RECORD_AUDIO);
         missing.add(Build.VERSION.SDK_INT >= 33 ? Manifest.permission.READ_MEDIA_AUDIO
                 : Manifest.permission.READ_EXTERNAL_STORAGE);
+        if (Build.VERSION.SDK_INT >= 33) missing.add(Manifest.permission.POST_NOTIFICATIONS);
         missing.removeIf(p -> checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED);
         if (!missing.isEmpty()) requestPermissions(missing.toArray(new String[0]), ASK_PERMISSIONS);
     }
@@ -191,6 +365,12 @@ public class MainActivity extends Activity {
         refreshInputs();
         startMonitor();
         loadRiffs();
+    }
+
+    void showAdvanced(boolean show) {
+        advanced.setVisibility(show ? View.VISIBLE : View.GONE);
+        advancedToggle.setText(show ? "Rozšírené ▴" : "Rozšírené ▾");
+        prefs.edit().putBoolean("advanced", show).apply();
     }
 
     // ---- Vstupy ----
@@ -224,7 +404,9 @@ public class MainActivity extends Activity {
     }
 
     void refreshInputs() {
-        AudioDeviceInfo before = selected();
+        String before = inputKey();
+        usbDevices.clear();
+        for (UsbDevice d : usb.getDeviceList().values()) if (UsbAudio.hasAudioInput(d)) usbDevices.add(d);
         devices.clear();
         for (AudioDeviceInfo d : audio.getDevices(AudioManager.GET_DEVICES_INPUTS)) {
             int t = d.getType();
@@ -236,26 +418,54 @@ public class MainActivity extends Activity {
         }
         devices.sort((a, b) -> Boolean.compare(isUsb(b), isUsb(a)));
         inputNames.clear();
-        for (AudioDeviceInfo d : devices) inputNames.add(deviceName(d));
+        for (UsbDevice d : usbDevices) inputNames.add(UsbAudio.name(d) + " – priamo cez USB");
+        for (AudioDeviceInfo d : devices) inputNames.add(deviceName(d) + (isUsb(d) ? " – cez Android" : ""));
         inputNames.notifyDataSetChanged();
 
         int pick = 0;
-        for (int i = 0; i < devices.size(); i++) {
-            if (before != null && devices.get(i).getId() == before.getId()) pick = i;
+        for (int i = 0; i < inputNames.getCount(); i++) {
+            if (keyAt(i).equals(before)) pick = i;
         }
-        if (!devices.isEmpty()) inputs.setSelection(pick);
+        if (inputNames.getCount() > 0) inputs.setSelection(pick);
         showInfo();
+        startMonitor();
+    }
+
+    String keyAt(int i) {
+        if (i < 0) return "";
+        if (i < usbDevices.size()) return "usb:" + usbDevices.get(i).getDeviceName();
+        i -= usbDevices.size();
+        return i < devices.size() ? "android:" + devices.get(i).getId() : "";
+    }
+
+    String inputKey() {
+        return inputs == null ? "" : keyAt(inputs.getSelectedItemPosition());
     }
 
     AudioDeviceInfo selected() {
-        int i = inputs == null ? -1 : inputs.getSelectedItemPosition();
+        int i = inputs == null ? -1 : inputs.getSelectedItemPosition() - usbDevices.size();
         return i >= 0 && i < devices.size() ? devices.get(i) : null;
+    }
+
+    UsbDevice selectedUsb() {
+        int i = inputs == null ? -1 : inputs.getSelectedItemPosition();
+        return i >= 0 && i < usbDevices.size() ? usbDevices.get(i) : null;
     }
 
     void showInfo() {
         AudioDeviceInfo d = selected();
-        boolean anyUsb = devices.stream().anyMatch(MainActivity::isUsb);
-        if (d == null) {
+        boolean anyUsb = !usbDevices.isEmpty() || devices.stream().anyMatch(MainActivity::isUsb);
+        boolean direct = selectedUsb() != null;
+        boolean busy = engine.recording() || testing;
+        usbInfo.setVisibility(usbDevices.isEmpty() ? View.GONE : View.VISIBLE);
+        sourceSpin.setEnabled(!direct && !busy);
+        formatSpin.setEnabled(!direct && !busy);
+        channelSpin.setEnabled(!direct && !busy);
+        test.setEnabled(!direct && !busy);
+        if (direct) {
+            info.setText("Aplikácia číta zariadenie sama, zvukový systém Androidu obchádza. "
+                    + "Zdroj, formát a kanály sa tu nepoužijú.");
+        } else if (d == null) {
             info.setText("Telefón nehlási žiadny vstup.");
         } else {
             info.setText((anyUsb ? "" : "USB zariadenie Android nevidí. Skontrolujte kábel a OTG.\n")
@@ -275,7 +485,7 @@ public class MainActivity extends Activity {
         return false;
     }
 
-    // ---- Nastavenia nahrávania ----
+    // ---- Nastavenia vstupu cez Android ----
 
     static final int AUTO = -1;
     static final int[] SOURCE_IDS = {AUTO, MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.MIC,
@@ -288,8 +498,8 @@ public class MainActivity extends Activity {
     static final int[] CHANNEL_IDS = {AUTO, 1, 2};
     static final String[] CHANNEL_NAMES = {"auto", "mono", "stereo"};
 
-    Spinner choice(int id, String[] names, String key) {
-        Spinner s = findViewById(id);
+    Spinner choice(View header, int id, String[] names, String key) {
+        Spinner s = header.findViewById(id);
         ArrayAdapter<String> a = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, names);
         a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         s.setAdapter(a);
@@ -299,7 +509,9 @@ public class MainActivity extends Activity {
                 prefs.edit().putInt(key, pos).apply();
                 startMonitor();
             }
-            public void onNothingSelected(AdapterView<?> p) { }
+
+            public void onNothingSelected(AdapterView<?> p) {
+            }
         });
         return s;
     }
@@ -327,34 +539,53 @@ public class MainActivity extends Activity {
         return dev != null && has(dev.getChannelCounts(), 2) ? 2 : 1;
     }
 
-    void setBusy(boolean busy) {
-        inputs.setEnabled(!busy);
-        sourceSpin.setEnabled(!busy);
-        formatSpin.setEnabled(!busy);
-        channelSpin.setEnabled(!busy);
-        test.setEnabled(!busy);
-        if (busy) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    /** Počas nahrávania obrazovka nezhasne (ak to používateľ nevypol); nahrávanie by bežalo aj pri zhasnutej. */
+    void keepScreen(boolean recording) {
+        if (recording && screenOn.isChecked()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
-    /** Spustené nahrávanie s konkrétnym nastavením. */
-    static class Capture {
+    void setBusy(boolean busy) {
+        keepScreen(busy && engine.recording());
+        boolean direct = selectedUsb() != null;
+        inputs.setEnabled(!busy);
+        sourceSpin.setEnabled(!busy && !direct);
+        formatSpin.setEnabled(!busy && !direct);
+        channelSpin.setEnabled(!busy && !direct);
+        test.setEnabled(!busy && !direct);
+        usbInfo.setEnabled(!busy);
+        retro.setEnabled(!busy);
+    }
+
+    /** Vstup cez zvukový systém Androidu s konkrétnym nastavením. */
+    static class Capture extends Source {
         AudioRecord ar;
         AudioDeviceInfo routed;
-        int source, encoding, channels, rate;
+        int source, encoding;
+        short[] shorts;
         float[] floats;
 
-        /** Prečíta blok ako 16-bitové vzorky; vráti ich počet. */
-        int read(short[] out) {
-            if (encoding != AudioFormat.ENCODING_PCM_FLOAT) return ar.read(out, 0, out.length);
+        @Override
+        int read(int[] out) {
+            float g = gain;
+            if (encoding != AudioFormat.ENCODING_PCM_FLOAT) {
+                if (shorts == null || shorts.length < out.length) shorts = new short[out.length];
+                int n = ar.read(shorts, 0, out.length);
+                for (int i = 0; i < n; i++) out[i] = g == 1f ? shorts[i] << 16 : Source.clamp(shorts[i] * 65536.0 * g);
+                return n;
+            }
             if (floats == null || floats.length < out.length) floats = new float[out.length];
             int n = ar.read(floats, 0, out.length, AudioRecord.READ_BLOCKING);
-            for (int i = 0; i < n; i++) out[i] = (short) Math.max(-32768, Math.min(32767, Math.round(floats[i] * 32767)));
+            for (int i = 0; i < n; i++) out[i] = Source.clamp(floats[i] * 2147483647.0 * g);
             return n;
         }
 
+        @Override
         void close() {
-            try { ar.stop(); } catch (Exception ignored) { }
+            try {
+                ar.stop();
+            } catch (Exception ignored) {
+            }
             ar.release();
         }
     }
@@ -416,31 +647,6 @@ public class MainActivity extends Activity {
         return fallback;
     }
 
-    static int[] peaks(short[] buf, int n, int channels, int[] into) {
-        for (int i = 0; i < n; i++) {
-            int v = Math.abs((int) buf[i]);
-            if (v > into[i % channels]) into[i % channels] = v;
-        }
-        return into;
-    }
-
-    static String db(int peak) {
-        return peak == 0 ? "ticho" : String.format(Locale.ROOT, "%.0f dB", 20 * Math.log10(peak / 32768.0));
-    }
-
-    static String levels(int[] p) {
-        return p.length == 2 ? "ľavý " + db(p[0]) + ", pravý " + db(p[1]) : db(p[0]);
-    }
-
-    void showLevel(int[] peak) {
-        int max = 0;
-        for (int p : peak) max = Math.max(max, p);
-        double d = max == 0 ? -60 : 20 * Math.log10(max / 32768.0);
-        int pct = (int) Math.max(0, Math.min(100, (d + 60) / 60 * 100));
-        String text = "Úroveň: " + levels(peak);
-        ui.post(() -> { level.setProgress(pct); levelText.setText(text); });
-    }
-
     static String describe(Capture c, AudioDeviceInfo dev) {
         return (c.routed == null ? "neznámy vstup" : deviceName(c.routed))
                 + ", zdroj „" + sourceName(c.source) + "“, " + formatName(c.encoding) + ", " + c.rate + " Hz, "
@@ -448,153 +654,318 @@ public class MainActivity extends Activity {
                 + (routedTo(c, dev) ? "" : "\nPozor: Android nepustil zvolený vstup.");
     }
 
-    // ---- Počúvanie: ukazuje, odkiaľ ide signál, aj keď sa nenahráva ----
-
-    void startMonitor() {
-        if (!resumed || recording || sourceSpin == null
-                || checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return;
-        stopMonitor();
+    /** Vstup podľa toho, čo je vybrané; null, ak treba počkať na povolenie pre USB. */
+    Source.Opener opener() {
+        UsbDevice u = selectedUsb();
+        if (u != null) {
+            if (!usb.hasPermission(u)) {
+                status.setText("Povoľte aplikácii prístup k USB zariadeniu.");
+                if (askedUsb.add(u.getDeviceName())) {
+                    Intent answer = new Intent("sk.lubeno.riffy.USB").setPackage(getPackageName());
+                    usb.requestPermission(u, PendingIntent.getBroadcast(this, 0, answer, PendingIntent.FLAG_IMMUTABLE));
+                }
+                return null;
+            }
+            return () -> UsbAudio.open(usb, u);
+        }
         AudioDeviceInfo dev = selected();
         int source = SOURCE_IDS[sourceSpin.getSelectedItemPosition()];
         int encoding = FORMAT_IDS[formatSpin.getSelectedItemPosition()];
         int channels = channelsFor(dev, CHANNEL_IDS[channelSpin.getSelectedItemPosition()]);
         int rate = rateFor(dev);
-        monitoring = true;
-        monitor = new Thread(() -> {
+        return () -> {
             Capture c = openChosen(dev, source, encoding, channels, rate);
-            if (c == null) {
-                ui.post(() -> status.setText("S týmto nastavením sa vstup nedá otvoriť."));
-                return;
-            }
-            String where = "Signál ide z: " + describe(c, dev);
-            ui.post(() -> status.setText(where));
-            short[] buf = new short[rate / 20 * channels];
-            int[] peak = new int[channels];
-            long last = 0;
-            while (monitoring) {
-                int n = c.read(buf);
-                if (n <= 0) break;
-                peaks(buf, n, channels, peak);
-                long now = System.currentTimeMillis();
-                if (now - last > 80) {
-                    last = now;
-                    if (monitoring) showLevel(peak);
-                    peak = new int[channels];
-                }
-            }
-            c.close();
-        }, "pocuvanie");
-        monitor.start();
+            if (c == null) throw new IOException("S týmto nastavením sa vstup nedá otvoriť.");
+            c.where = describe(c, dev);
+            return c;
+        };
     }
 
-    void stopMonitor() {
-        monitoring = false;
-        Thread t = monitor;
-        monitor = null;
-        if (t != null) {
-            try { t.join(500); } catch (InterruptedException ignored) { }
+    String settingsKey() {
+        return inputKey() + "/" + sourceSpin.getSelectedItemPosition() + "/" + formatSpin.getSelectedItemPosition()
+                + "/" + channelSpin.getSelectedItemPosition();
+    }
+
+    /** Spustí stále čítanie vstupu (ak už beží s rovnakým nastavením, nič nemení). */
+    void startMonitor() {
+        if (!resumed || testing || engine.recording() || sourceSpin == null
+                || checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return;
+        Source.Opener opener = opener();
+        if (opener == null) return;
+        engine.start(settingsKey(), opener);
+    }
+
+    float gain() {
+        return (float) Math.pow(10, (gainBar.getProgress() - 24) / 20.0);
+    }
+
+    void showGain() {
+        int db = gainBar.getProgress() - 24;
+        gainText.setText("Vstupná úroveň: " + (db > 0 ? "+" : "") + db + " dB");
+    }
+
+    void showLevel(int[] peak) {
+        int max = 0;
+        for (int p : peak) max = Math.max(max, p);
+        double d = max == 0 ? -60 : 20 * Math.log10(max / 32768.0);
+        int pct = (int) Math.max(0, Math.min(100, (d + 60) / 60 * 100));
+        String text = "Úroveň: " + Source.levels(peak) + (max >= 32700 ? "   ⚠ prebudené, uberte" : "");
+        ui.post(() -> {
+            level.setProgress(pct);
+            levelText.setText(text);
+        });
+    }
+
+    // ---- Metronóm ----
+
+    void changeBpm(int by) {
+        bpm = Math.max(30, Math.min(300, bpm + by));
+        prefs.edit().putInt("bpm", bpm).apply();
+        METRONOME.bpm = bpm;
+        showBpm();
+    }
+
+    void showBpm() {
+        bpmText.setText(bpm + " BPM");
+    }
+
+    void startMetronome() {
+        METRONOME.bpm = bpm;
+        METRONOME.start(metronomeDevice());
+    }
+
+    /** Metronóm ide do ToneX (do slúchadiel na gitare), ak nie je zvolený telefón. */
+    AudioDeviceInfo metronomeDevice() {
+        if (!metroPhone.isChecked()) {
+            for (AudioDeviceInfo d : audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                if (isUsb(d)) return d;
+            }
         }
-        level.setProgress(0);
-        levelText.setText("");
+        return playbackDevice();
     }
 
     // ---- Nahrávanie ----
 
-    void start() {
+    void onRecordPressed() {
+        if (testing) {
+            testing = false;
+            return;
+        }
+        if (counting) {
+            cancelCountIn();
+            return;
+        }
+        if (engine.recording()) {
+            finishRecording();
+            return;
+        }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             askPermissions();
             return;
         }
         stopPlaying();
-        stopMonitor();
-        AudioDeviceInfo dev = selected();
-        int source = SOURCE_IDS[sourceSpin.getSelectedItemPosition()];
-        int encoding = FORMAT_IDS[formatSpin.getSelectedItemPosition()];
-        int channels = channelsFor(dev, CHANNEL_IDS[channelSpin.getSelectedItemPosition()]);
-        int rate = rateFor(dev);
-
-        recording = true;
-        started = System.currentTimeMillis();
-        rec.setText("■ Zastaviť");
-        setBusy(true);
-        tick();
-
-        worker = new Thread(() -> record(dev, source, encoding, channels, rate), "nahravanie");
-        worker.start();
+        if (!engine.running()) {
+            startMonitor();
+            Toast.makeText(this, "Vstup sa ešte spúšťa, skúste o chvíľu.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (countIn.isChecked()) startCountIn();
+        else beginRecording(false);
     }
 
-    void stop() {
-        recording = false;
-        rec.setEnabled(false);
+    /** Odpočet jedného taktu metronómom, potom sa začne nahrávať. */
+    void startCountIn() {
+        counting = true;
+        boolean wasOn = METRONOME.running();
+        if (!wasOn) startMetronome();
+        int beats = METRONOME.beatsPerBar;
+        long beatMs = 60000L / bpm;
+        long now = SystemClock.uptimeMillis();
+        for (int k = 0; k < beats; k++) {
+            int left = beats - k;
+            ui.postAtTime(() -> rec.setText("Odpočet " + left + "   (zrušiť)"), COUNT_IN, now + k * beatMs);
+        }
+        ui.postAtTime(() -> {
+            counting = false;
+            if (!wasOn && !metro.isChecked()) METRONOME.stop();
+            beginRecording(true);
+        }, COUNT_IN, now + beats * beatMs);
+    }
+
+    void cancelCountIn() {
+        ui.removeCallbacksAndMessages(COUNT_IN);
+        counting = false;
+        if (!metro.isChecked()) METRONOME.stop();
+        rec.setText("● Nahrávať");
+    }
+
+    /** counted: pred nahrávaním bol odpočet, tempo sa k riffu uloží, aj keď metronóm potom stíchol. */
+    void beginRecording(boolean counted) {
+        File temp = new File(getCacheDir(), "nahravka-" + System.currentTimeMillis() + ".wav");
+        try {
+            engine.startRecording(temp);
+        } catch (IOException e) {
+            status.setText(e.getMessage());
+            rec.setText("● Nahrávať");
+            return;
+        }
+        recordingBpm = METRONOME.running() || counted ? bpm : 0;
+        RecordingService.start(this);
+        setBusy(true);
+        tick();
     }
 
     void tick() {
-        if (!recording || testing) return;
-        rec.setText("■ Zastaviť   " + clock(System.currentTimeMillis() - started));
+        if (!engine.recording()) return;
+        rec.setText("■ Zastaviť   " + clock(System.currentTimeMillis() - engine.recordingSince()));
         ui.postDelayed(this::tick, 250);
     }
 
-    void record(AudioDeviceInfo dev, int source, int encoding, int channels, int rate) {
-        File temp = new File(getCacheDir(), "nahravka.wav");
-        Capture c = null;
-        long bytes = 0;
-
-        try {
-            c = openChosen(dev, source, encoding, channels, rate);
-            if (c == null) throw new IOException("S týmto nastavením sa nahrávanie nedá spustiť.");
-            final String shown = "Nahráva z: " + describe(c, dev);
-            ui.post(() -> status.setText(shown));
-
-            short[] buf = new short[rate / 20 * channels];
-            byte[] out16 = new byte[buf.length * 2];
-            int[] peak = new int[channels];
-            try (FileOutputStream out = new FileOutputStream(temp)) {
-                out.write(new byte[44]);
-                long lastLevel = 0;
-                while (recording) {
-                    int n = c.read(buf);
-                    if (n <= 0) continue;
-                    for (int i = 0; i < n; i++) {
-                        out16[2 * i] = (byte) buf[i];
-                        out16[2 * i + 1] = (byte) (buf[i] >> 8);
-                    }
-                    out.write(out16, 0, n * 2);
-                    bytes += n * 2L;
-                    peaks(buf, n, channels, peak);
-                    long now = System.currentTimeMillis();
-                    if (now - lastLevel > 80) {
-                        lastLevel = now;
-                        showLevel(peak);
-                        peak = new int[channels];
-                    }
+    void finishRecording() {
+        rec.setEnabled(false);
+        RecordingService.stop(this);
+        int tempo = recordingBpm;
+        long since = engine.recordingSince();
+        IO.execute(() -> {
+            Engine.Recorded r = null;
+            try {
+                r = engine.stopRecording();
+                if (r != null) {
+                    String name = "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(since));
+                    String saved = save(r.file, name, tempo);
+                    ui.post(() -> Toast.makeText(this, "Uložené: " + saved, Toast.LENGTH_SHORT).show());
                 }
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                ui.post(() -> status.setText("Chyba pri ukladaní: " + msg));
+            } finally {
+                if (r != null) r.file.delete();
+                ui.post(() -> {
+                    rec.setEnabled(true);
+                    rec.setText("● Nahrávať");
+                    setBusy(false);
+                    loadRiffs();
+                    if (!resumed) engine.stop();
+                    else startMonitor();
+                });
             }
-            c.close();
-            c = null;
-            writeHeader(temp, rate, channels, bytes);
-            String name = "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(started));
-            save(temp, name);
-            ui.post(() -> Toast.makeText(this, "Uložené: " + name, Toast.LENGTH_SHORT).show());
-        } catch (Exception e) {
-            String msg = e.getMessage();
-            ui.post(() -> status.setText("Chyba: " + msg));
-        } finally {
-            if (c != null) c.close();
-            temp.delete();
-            recording = false;
-            ui.post(() -> {
-                rec.setEnabled(true);
-                rec.setText("● Nahrávať");
-                level.setProgress(0);
-                levelText.setText("");
-                setBusy(false);
-                loadRiffs();
-                startMonitor();
-            });
-        }
+        });
     }
 
-    // ---- Skúška vstupu ----
+    /** Spätné nahrávanie: uloží, čo vstup práve počul. */
+    void saveRetro() {
+        if (!engine.running()) {
+            Toast.makeText(this, "Vstup nebeží.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        retro.setEnabled(false);
+        int tempo = METRONOME.running() ? bpm : 0;
+        long now = System.currentTimeMillis();
+        IO.execute(() -> {
+            File temp = new File(getCacheDir(), "spatne-" + now + ".wav");
+            try {
+                Engine.Recorded r = engine.saveHistory(temp, Engine.HISTORY_SECONDS);
+                if (r == null) {
+                    ui.post(() -> Toast.makeText(this, "Ešte nie je čo uložiť.", Toast.LENGTH_SHORT).show());
+                } else {
+                    String saved = save(temp, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)) + " spätne", tempo);
+                    ui.post(() -> Toast.makeText(this, "Uložené: " + saved, Toast.LENGTH_SHORT).show());
+                }
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                ui.post(() -> status.setText("Chyba pri ukladaní: " + msg));
+            } finally {
+                temp.delete();
+                ui.post(() -> {
+                    retro.setEnabled(!engine.recording());
+                    loadRiffs();
+                });
+            }
+        });
+    }
+
+    /**
+     * Uloží nahrávku do Hudba/Riffy, kde ju vidia aj iné aplikácie; podľa nastavenia oreže ticho.
+     * Vráti meno, pod ktorým sa uložila.
+     */
+    String save(File temp, String name, int tempo) throws IOException {
+        long[] range;
+        try (InputStream in = new FileInputStream(temp)) {
+            Wav.Info i = Wav.read(in);
+            range = new long[]{0, i.frames()};
+        }
+        if (prefs.getBoolean("trim", true)) range = Wav.trimRange(temp, -50, 0.3);
+        ContentResolver cr = getContentResolver();
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".wav");
+        v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav");
+        v.put(MediaStore.Audio.Media.RELATIVE_PATH, FOLDER);
+        v.put(MediaStore.Audio.Media.IS_PENDING, 1);
+        Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
+        if (uri == null) throw new IOException("Nahrávku sa nepodarilo uložiť.");
+        try (OutputStream out = cr.openOutputStream(uri)) {
+            Wav.copyRange(temp, range[0], range[1], out);
+        }
+        v.clear();
+        v.put(MediaStore.Audio.Media.IS_PENDING, 0);
+        cr.update(uri, v, null, null);
+        String saved = name;
+        try (Cursor c = cr.query(uri, new String[]{MediaStore.Audio.Media.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) saved = c.getString(0).replaceFirst("\\.wav$", "");
+        }
+        if (tempo > 0) {
+            Meta.Info i = meta.get(saved);
+            i.bpm = tempo;
+            meta.put(saved, i);
+        }
+        return saved;
+    }
+
+    // ---- Technický popis USB zariadenia ----
+
+    void usbReport() {
+        UsbDevice u = selectedUsb() != null ? selectedUsb() : usbDevices.isEmpty() ? null : usbDevices.get(0);
+        if (u == null) return;
+        if (!usb.hasPermission(u)) {
+            askedUsb.remove(u.getDeviceName());
+            Intent answer = new Intent("sk.lubeno.riffy.USB").setPackage(getPackageName());
+            usb.requestPermission(u, PendingIntent.getBroadcast(this, 0, answer, PendingIntent.FLAG_IMMUTABLE));
+            Toast.makeText(this, "Povoľte prístup a ťuknite znova.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        testing = true;
+        engine.stop();
+        setBusy(true);
+        status.setText("Hrajte na gitare, asi 5 sekúnd skúšam čítať z USB…");
+        new Thread(() -> {
+            String text = "Telefón: " + Build.MANUFACTURER + " " + Build.MODEL + ", Android " + Build.VERSION.RELEASE
+                    + "\n" + UsbAudio.selfTest(usb, u) + UsbAudio.report(usb, u);
+            ui.post(() -> {
+                testing = false;
+                setBusy(false);
+                status.setText("");
+                startMonitor();
+                showReport(text);
+            });
+        }, "popis").start();
+    }
+
+    void showReport(String text) {
+        new AlertDialog.Builder(this)
+                .setTitle("Popis USB zariadenia")
+                .setMessage(text)
+                .setPositiveButton("Poslať", (d, w) -> {
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(Intent.EXTRA_SUBJECT, "Riffy – popis USB zariadenia");
+                    send.putExtra(Intent.EXTRA_TEXT, text);
+                    startActivity(Intent.createChooser(send, "Poslať popis"));
+                })
+                .setNegativeButton("Zavrieť", null)
+                .show();
+    }
+
+    // ---- Skúška vstupu cez Android ----
 
     static class Result {
         int source, encoding, channels;
@@ -611,7 +982,7 @@ public class MainActivity extends Activity {
         String line() {
             String how = sourceName(source) + ", " + formatName(encoding) + ", " + (channels == 2 ? "stereo" : "mono");
             if (!opened) return "nespustilo sa — " + how;
-            return levels(peak) + " — " + how + (routed ? "" : " (nahrávalo z: " + device + ")");
+            return Source.levels(peak) + " — " + how + (routed ? "" : " (nahrávalo z: " + device + ")");
         }
     }
 
@@ -631,19 +1002,18 @@ public class MainActivity extends Activity {
 
     void runTest() {
         stopPlaying();
-        stopMonitor();
+        engine.stop();
         AudioDeviceInfo dev = selected();
         int rate = rateFor(dev);
-        recording = true;
         testing = true;
         rec.setText("■ Zastaviť skúšku");
         setBusy(true);
-        worker = new Thread(() -> {
+        new Thread(() -> {
             List<Result> results = new ArrayList<>();
             int total = (SOURCE_IDS.length - 1) * FORMAT_IDS.length * 2, done = 0;
-            for (int s = 1; s < SOURCE_IDS.length && recording; s++) {
-                for (int e = 0; e < FORMAT_IDS.length && recording; e++) {
-                    for (int ch = 1; ch <= 2 && recording; ch++) {
+            for (int s = 1; s < SOURCE_IDS.length && testing; s++) {
+                for (int e = 0; e < FORMAT_IDS.length && testing; e++) {
+                    for (int ch = 1; ch <= 2 && testing; ch++) {
                         Result r = new Result();
                         r.source = SOURCE_IDS[s];
                         r.encoding = FORMAT_IDS[e];
@@ -657,16 +1027,16 @@ public class MainActivity extends Activity {
                             r.routed = routedTo(c, dev);
                             r.device = c.routed == null ? "neznámy vstup" : deviceName(c.routed);
                             r.peak = new int[ch];
-                            short[] buf = new short[rate / 20 * ch];
+                            int[] buf = new int[rate / 20 * ch];
                             long begin = System.currentTimeMillis();
-                            while (recording && System.currentTimeMillis() - begin < 1500) {
+                            while (testing && System.currentTimeMillis() - begin < 1500) {
                                 int n = c.read(buf);
                                 if (n <= 0) break;
                                 // Prvé chvíle po spustení bývajú tiché, nepočítajú sa.
-                                if (System.currentTimeMillis() - begin > 300) peaks(buf, n, ch, r.peak);
+                                if (System.currentTimeMillis() - begin > 300) Source.peaks(buf, n, ch, r.peak);
                             }
                             c.close();
-                            String lvl = "Úroveň: " + levels(r.peak);
+                            String lvl = "Úroveň: " + Source.levels(r.peak);
                             ui.post(() -> levelText.setText(lvl));
                         }
                         results.add(r);
@@ -674,9 +1044,7 @@ public class MainActivity extends Activity {
                 }
             }
             ui.post(() -> {
-                recording = false;
                 testing = false;
-                rec.setEnabled(true);
                 rec.setText("● Nahrávať");
                 levelText.setText("");
                 status.setText("");
@@ -684,8 +1052,7 @@ public class MainActivity extends Activity {
                 startMonitor();
                 showResults(results, dev);
             });
-        }, "skuska");
-        worker.start();
+        }, "skuska").start();
     }
 
     void showResults(List<Result> results, AudioDeviceInfo dev) {
@@ -724,58 +1091,11 @@ public class MainActivity extends Activity {
         dialog.show();
     }
 
-    static void writeHeader(File f, int rate, int channels, long data) throws IOException {
-        try (RandomAccessFile w = new RandomAccessFile(f, "rw")) {
-            byte[] h = new byte[44];
-            put(h, 0, "RIFF");
-            int32(h, 4, 36 + data);
-            put(h, 8, "WAVEfmt ");
-            int32(h, 16, 16);
-            h[20] = 1;
-            h[22] = (byte) channels;
-            int32(h, 24, rate);
-            int32(h, 28, (long) rate * channels * 2);
-            h[32] = (byte) (channels * 2);
-            h[34] = 16;
-            put(h, 36, "data");
-            int32(h, 40, data);
-            w.seek(0);
-            w.write(h);
-        }
-    }
-
-    static void put(byte[] h, int at, String s) {
-        for (int i = 0; i < s.length(); i++) h[at + i] = (byte) s.charAt(i);
-    }
-
-    static void int32(byte[] h, int at, long v) {
-        for (int i = 0; i < 4; i++) h[at + i] = (byte) (v >> (8 * i));
-    }
-
-    /** Uloží nahrávku do Hudba/Riffy, kde ju vidia aj iné aplikácie. */
-    void save(File temp, String name) throws IOException {
-        ContentResolver cr = getContentResolver();
-        ContentValues v = new ContentValues();
-        v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".wav");
-        v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav");
-        v.put(MediaStore.Audio.Media.RELATIVE_PATH, FOLDER);
-        v.put(MediaStore.Audio.Media.IS_PENDING, 1);
-        Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
-        if (uri == null) throw new IOException("Nahrávku sa nepodarilo uložiť.");
-        try (InputStream in = new FileInputStream(temp); OutputStream out = cr.openOutputStream(uri)) {
-            byte[] buf = new byte[65536];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-        }
-        v.clear();
-        v.put(MediaStore.Audio.Media.IS_PENDING, 0);
-        cr.update(uri, v, null, null);
-    }
-
     // ---- Zoznam nahrávok ----
 
     void loadRiffs() {
         riffs.clear();
+        boolean onlyFavorites = favorites.isChecked();
         String[] cols = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATE_ADDED};
         try (Cursor c = getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols,
@@ -785,6 +1105,8 @@ public class MainActivity extends Activity {
                 Riff r = new Riff();
                 r.id = c.getLong(0);
                 r.name = c.getString(1).replaceFirst("\\.wav$", "");
+                r.info = meta.get(r.name);
+                if (onlyFavorites && !r.info.favorite) continue;
                 r.duration = c.getLong(2);
                 if (r.duration <= 0) r.duration = wavLength(r.uri());
                 r.added = c.getLong(3);
@@ -816,11 +1138,13 @@ public class MainActivity extends Activity {
     void play(Riff r) {
         boolean same = r.id == playing;
         stopPlaying();
-        if (same || recording) return;
+        if (same || engine.recording()) return;
         try {
             player = new MediaPlayer();
             player.setDataSource(this, r.uri());
             player.setOnCompletionListener(p -> stopPlaying());
+            AudioDeviceInfo out = playbackDevice();
+            if (out != null) player.setPreferredDevice(out);
             player.prepare();
             player.start();
             playing = r.id;
@@ -831,9 +1155,31 @@ public class MainActivity extends Activity {
         riffList.notifyDataSetChanged();
     }
 
+    /** Prehráva sa do slúchadiel, Bluetooth alebo reproduktora telefónu, nie do USB zariadenia, z ktorého sa nahráva. */
+    AudioDeviceInfo playbackDevice() {
+        AudioDeviceInfo speaker = null, other = null;
+        for (AudioDeviceInfo d : audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            switch (d.getType()) {
+                case AudioDeviceInfo.TYPE_WIRED_HEADPHONES:
+                case AudioDeviceInfo.TYPE_WIRED_HEADSET:
+                case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
+                    if (other == null) other = d;
+                    break;
+                case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER:
+                    speaker = d;
+                    break;
+                default:
+            }
+        }
+        return other != null ? other : speaker;
+    }
+
     void stopPlaying() {
         if (player != null) {
-            try { player.stop(); } catch (Exception ignored) { }
+            try {
+                player.stop();
+            } catch (Exception ignored) {
+            }
             player.release();
             player = null;
         }
@@ -842,13 +1188,58 @@ public class MainActivity extends Activity {
     }
 
     void options(Riff r) {
+        String[] items = {r.info.favorite ? "☆ Odobrať z obľúbených" : "★ Pridať k obľúbeným",
+                "Poznámka, tempo, tónina", "Premenovať", "Poslať ako WAV (plná kvalita)",
+                "Poslať ako M4A (menší súbor)", "Zmazať"};
         new AlertDialog.Builder(this)
                 .setTitle(r.name)
-                .setItems(new String[]{"Premenovať", "Poslať / zdieľať", "Zmazať"}, (d, which) -> {
-                    if (which == 0) rename(r);
-                    else if (which == 1) share(r);
+                .setItems(items, (d, which) -> {
+                    if (which == 0) {
+                        r.info.favorite = !r.info.favorite;
+                        meta.put(r.name, r.info);
+                        loadRiffs();
+                    } else if (which == 1) editInfo(r);
+                    else if (which == 2) rename(r);
+                    else if (which == 3) share(r.uri(), "audio/wav", r.name);
+                    else if (which == 4) shareM4a(r);
                     else delete(r);
                 })
+                .show();
+    }
+
+    void editInfo(Riff r) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = Math.round(20 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+        EditText note = new EditText(this);
+        note.setHint("Poznámka");
+        note.setText(r.info.note);
+        EditText tempo = new EditText(this);
+        tempo.setHint("Tempo (BPM)");
+        tempo.setInputType(InputType.TYPE_CLASS_NUMBER);
+        if (r.info.bpm > 0) tempo.setText(String.valueOf(r.info.bpm));
+        EditText key = new EditText(this);
+        key.setHint("Tónina (napr. Am)");
+        key.setText(r.info.key);
+        box.addView(note);
+        box.addView(tempo);
+        box.addView(key);
+        new AlertDialog.Builder(this)
+                .setTitle(r.name)
+                .setView(box)
+                .setPositiveButton("Uložiť", (d, w) -> {
+                    r.info.note = note.getText().toString().trim();
+                    r.info.key = key.getText().toString().trim();
+                    try {
+                        r.info.bpm = Integer.parseInt(tempo.getText().toString().trim());
+                    } catch (NumberFormatException e) {
+                        r.info.bpm = 0;
+                    }
+                    meta.put(r.name, r.info);
+                    loadRiffs();
+                })
+                .setNegativeButton("Zrušiť", null)
                 .show();
     }
 
@@ -866,6 +1257,7 @@ public class MainActivity extends Activity {
                     v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".wav");
                     try {
                         getContentResolver().update(r.uri(), v, null, null);
+                        meta.rename(r.name, name);
                     } catch (Exception e) {
                         Toast.makeText(this, "Túto nahrávku sa nedá premenovať.", Toast.LENGTH_SHORT).show();
                     }
@@ -875,12 +1267,47 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    void share(Riff r) {
+    void share(Uri uri, String type, String title) {
         Intent send = new Intent(Intent.ACTION_SEND);
-        send.setType("audio/wav");
-        send.putExtra(Intent.EXTRA_STREAM, r.uri());
+        send.setType(type);
+        send.putExtra(Intent.EXTRA_STREAM, uri);
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivity(Intent.createChooser(send, r.name));
+        startActivity(Intent.createChooser(send, title));
+    }
+
+    /** Prevedie riff do M4A, uloží ho do Hudba/Riffy/Zdieľané a ponúkne na poslanie. */
+    void shareM4a(Riff r) {
+        Toast.makeText(this, "Pripravujem M4A…", Toast.LENGTH_SHORT).show();
+        IO.execute(() -> {
+            File temp = new File(getCacheDir(), "zdielanie.m4a");
+            try {
+                try (InputStream in = getContentResolver().openInputStream(r.uri())) {
+                    M4a.convert(in, temp);
+                }
+                ContentResolver cr = getContentResolver();
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.Audio.Media.DISPLAY_NAME, r.name + ".m4a");
+                v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4");
+                v.put(MediaStore.Audio.Media.RELATIVE_PATH, SHARED);
+                v.put(MediaStore.Audio.Media.IS_PENDING, 1);
+                Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) throw new IOException("M4A sa nepodarilo uložiť.");
+                try (InputStream in = new FileInputStream(temp); OutputStream out = cr.openOutputStream(uri)) {
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                v.clear();
+                v.put(MediaStore.Audio.Media.IS_PENDING, 0);
+                cr.update(uri, v, null, null);
+                ui.post(() -> share(uri, "audio/mp4", r.name));
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                ui.post(() -> Toast.makeText(this, "Prevod sa nepodaril: " + msg, Toast.LENGTH_LONG).show());
+            } finally {
+                temp.delete();
+            }
+        });
     }
 
     void delete(Riff r) {
@@ -890,6 +1317,7 @@ public class MainActivity extends Activity {
                     if (r.id == playing) stopPlaying();
                     try {
                         getContentResolver().delete(r.uri(), null, null);
+                        meta.remove(r.name);
                         loadRiffs();
                     } catch (SecurityException e) {
                         // Nahrávka z predošlej inštalácie: Android si vypýta súhlas sám.
