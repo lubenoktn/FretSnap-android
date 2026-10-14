@@ -14,6 +14,22 @@ android {
         versionName = "1.0"
     }
 
+    buildTypes {
+        release {
+            minifyEnabled = true
+            shrinkResources = true
+            // Aplikácia nejde do obchodu, stačí ladiaci podpis; aktualizácie sa potom nainštalujú cez starú verziu.
+            signingConfig = signingConfigs.debug
+        }
+    }
+
+    // Skomprimovaný kód: menší súbor na prenos do telefónu.
+    packaging {
+        dex {
+            useLegacyPackaging = true
+        }
+    }
+
     lint {
         // Aplikácia je len po slovensky, preklady nie sú potrebné.
         disable += ["SetTextI18n", "HardcodedText", "OldTargetApi", "GradleDependency"]
