@@ -315,6 +315,13 @@ public class UsbAudio {
             return k;
         }
 
+        /** Nič neprišlo, alebo len pakety samých núl (ToneX aj v tichu posiela slabý šum). */
+        @Override
+        boolean dead() {
+            long[] st = stats();
+            return st[0] == 0 || st[3] >= st[4];
+        }
+
         long[] stats() {
             return handle == 0 ? new long[7] : nativeStats(handle);
         }

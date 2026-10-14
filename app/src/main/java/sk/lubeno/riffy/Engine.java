@@ -105,7 +105,30 @@ final class Engine {
         }
     }
 
+    /** Koľkokrát sa vstup, z ktorého ide len ticho, skúsi otvoriť znova. */
+    static final int RETRIES = 3;
+
     private void loop(Source.Opener opener) {
+        for (int attempt = 0; ; attempt++) {
+            if (!runOnce(opener, attempt < RETRIES)) break;
+            Listener l = listener;
+            if (l != null) l.onStatus("Zariadenie sa ešte zapína, skúšam ho otvoriť znova…");
+            try {
+                Thread.sleep(800);
+            } catch (InterruptedException e) {
+                break;
+            }
+            synchronized (this) {
+                if (!running || thread != Thread.currentThread()) break;
+            }
+        }
+    }
+
+    /**
+     * Otvorí vstup a číta, kým sa nemá skončiť. Vráti true, ak treba vstup otvoriť znova:
+     * zariadenie po zapojení ešte nebolo pripravené a posiela len nuly (smie len mimo nahrávania).
+     */
+    private boolean runOnce(Source.Opener opener, boolean mayRetry) {
         Source c;
         try {
             c = opener.open();
@@ -115,14 +138,16 @@ final class Engine {
             }
             Listener l = listener;
             if (l != null) l.onStatus(e.getMessage());
-            return;
+            return false;
         }
         c.gain = gain;
         int capacity = Math.max(c.rate, 48000);
         synchronized (this) {
             source = c;
             channels = c.channels;
-            history = new int[capacity * HISTORY_SECONDS * c.channels];
+            if (history == null || history.length != capacity * HISTORY_SECONDS * c.channels) {
+                history = new int[capacity * HISTORY_SECONDS * c.channels];
+            }
             historyPos = 0;
             historyFrames = 0;
         }
@@ -131,7 +156,8 @@ final class Engine {
 
         int[] buf = new int[capacity / 20 * c.channels];
         int[] peak = new int[c.channels];
-        long last = 0;
+        long opened = System.currentTimeMillis(), last = 0;
+        boolean verified = false, retry = false;
         String failure = null;
         try {
             while (true) {
@@ -142,6 +168,14 @@ final class Engine {
                 if (n < 0) {
                     failure = c.error != null ? c.error : "Čítanie zo vstupu zlyhalo.";
                     break;
+                }
+                long now = System.currentTimeMillis();
+                if (!verified && now - opened > Source.SETTLE_MS) {
+                    verified = true;
+                    synchronized (this) {
+                        if (mayRetry && writer == null && c.dead()) retry = true;
+                    }
+                    if (retry) break;
                 }
                 if (n == 0) continue;
                 synchronized (this) {
@@ -156,7 +190,6 @@ final class Engine {
                     }
                 }
                 Source.peaks(buf, n, c.channels, peak);
-                long now = System.currentTimeMillis();
                 if (now - last > 80) {
                     last = now;
                     l = listener;
@@ -168,12 +201,13 @@ final class Engine {
             synchronized (this) {
                 if (writer != null) writer.rate = c.finalRate();
                 source = null;
-                if (thread == Thread.currentThread()) running = false;
+                if (!retry && thread == Thread.currentThread()) running = false;
             }
             c.close();
         }
         l = listener;
         if (failure != null && l != null) l.onFailed(failure);
+        return retry;
     }
 
     private void remember(int[] buf, int n) {

@@ -105,6 +105,9 @@ public class MainActivity extends Activity {
 
     volatile boolean testing;
     boolean resumed, counting;
+    /** Po zapojení zariadenia sa chvíľu počká, kým sa zapne (ToneX inak prepočuje spustenie prenosu). */
+    long waitUntil;
+    final Runnable delayedMonitor = this::startMonitor;
     float currentGain = 1f;
     int bpm, recordingBpm;
     MediaPlayer player;
@@ -246,6 +249,7 @@ public class MainActivity extends Activity {
         BroadcastReceiver onPlug = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent i) {
+                if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(i.getAction())) deviceAttached();
                 refreshInputs();
             }
         };
@@ -302,15 +306,21 @@ public class MainActivity extends Activity {
             return true;
         });
 
+        if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(getIntent().getAction())) deviceAttached();
         refreshInputs();
         askPermissions();
         loadRiffs();
+    }
+
+    void deviceAttached() {
+        waitUntil = SystemClock.uptimeMillis() + 2000;
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         // Pripojený ToneX (Android otvoril aplikáciu sám).
+        if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) deviceAttached();
         refreshInputs();
     }
 
@@ -690,6 +700,13 @@ public class MainActivity extends Activity {
     void startMonitor() {
         if (!resumed || testing || engine.recording() || sourceSpin == null
                 || checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return;
+        long wait = waitUntil - SystemClock.uptimeMillis();
+        if (wait > 0) {
+            status.setText("Čakám, kým sa zariadenie zapne…");
+            ui.removeCallbacks(delayedMonitor);
+            ui.postDelayed(delayedMonitor, wait);
+            return;
+        }
         Source.Opener opener = opener();
         if (opener == null) return;
         engine.start(settingsKey(), opener);

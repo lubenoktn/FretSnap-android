@@ -18,6 +18,14 @@ abstract class Source {
 
     abstract void close();
 
+    /** Po koľkých ms od otvorenia sa overí, či zo vstupu niečo ide. */
+    static final long SETTLE_MS = 2500;
+
+    /** Vstup je otvorený, ale nič z neho nejde (napr. zariadenie sa po zapojení ešte zapínalo). */
+    boolean dead() {
+        return false;
+    }
+
     /** Vzorkovanie, ktoré sa zapíše do nahrávky. */
     int finalRate() {
         return rate;
