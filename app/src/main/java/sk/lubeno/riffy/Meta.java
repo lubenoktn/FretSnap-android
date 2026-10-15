@@ -22,9 +22,13 @@ final class Meta {
         String note = "", key = "";
         int bpm;
         boolean favorite;
+        /** Štýl bicích, ktoré hrali pri nahrávaní („Rock“…); prázdne = žiadne. */
+        String drums = "";
+        /** Kde v nahrávke (ms) je prvá doba taktu; -1 = nevie sa. */
+        int beat0 = -1;
 
         boolean empty() {
-            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite;
+            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite && drums.isEmpty();
         }
     }
 
@@ -54,6 +58,8 @@ final class Meta {
         i.key = o.optString("key");
         i.bpm = o.optInt("bpm");
         i.favorite = o.optBoolean("favorite");
+        i.drums = o.optString("drums");
+        i.beat0 = o.optInt("beat0", -1);
         return i;
     }
 
@@ -67,6 +73,8 @@ final class Meta {
                 o.put("key", i.key);
                 o.put("bpm", i.bpm);
                 o.put("favorite", i.favorite);
+                if (!i.drums.isEmpty()) o.put("drums", i.drums);
+                if (i.beat0 >= 0) o.put("beat0", i.beat0);
                 all.put(name, o);
             }
         } catch (JSONException ignored) {
@@ -87,6 +95,8 @@ final class Meta {
             o.put("key", i.key);
             o.put("bpm", i.bpm);
             o.put("favorite", i.favorite);
+            if (!i.drums.isEmpty()) o.put("drums", i.drums);
+            if (i.beat0 >= 0) o.put("beat0", i.beat0);
             return o.toString().getBytes(StandardCharsets.UTF_8);
         } catch (JSONException e) {
             return new byte[0];
@@ -104,6 +114,8 @@ final class Meta {
             i.key = o.optString("key");
             i.bpm = o.optInt("bpm");
             i.favorite = o.optBoolean("favorite");
+            i.drums = o.optString("drums");
+            i.beat0 = o.optInt("beat0", -1);
             return i;
         } catch (JSONException e) {
             return null;

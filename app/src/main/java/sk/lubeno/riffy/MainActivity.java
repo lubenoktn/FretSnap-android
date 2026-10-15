@@ -101,6 +101,7 @@ public class MainActivity extends Activity {
     static final String SHARED = FOLDER + "Zdieľané/";
     static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2, ASK_RENAME = 3;
     static final Metronome METRONOME = new Metronome();
+    static final Drums DRUMS = new Drums();
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
     static final Object COUNT_IN = new Object();
     static final int GREEN = 0xFF2E7D32, ORANGE = 0xFFEF6C00, GRAY = 0xFF757575, RED = 0xFFC62828, DARK = 0xFF323232;
@@ -114,7 +115,7 @@ public class MainActivity extends Activity {
     Meta meta;
 
     View mainPage, settingsPage, listArea, tools, spacer, tunerPanel, playerPanel, playerMore, notice;
-    TextView chip, banner, levelText, gainText, recHint, metroChip, countChip, filterAll, filterFav, empty;
+    TextView chip, banner, levelText, gainText, recHint, metroChip, drumChip, countChip, filterAll, filterFav, empty;
     TextView recClock, tunerText, playerTitle, playerInfo, playerTime, loopText, playPause, playerExpand;
     TextView noticeText, noticeAction, status, info, diaryText, selectCount;
     View filterRow, selectBar;
@@ -131,7 +132,7 @@ public class MainActivity extends Activity {
     SeekBar gainBar;
     ProgressBar playerProgress;
     Spinner inputs, sourceSpin, formatSpin, channelSpin, speed;
-    CheckBox trim, screenOn, metroPhone, loop, normalize;
+    CheckBox trim, screenOn, metroPhone, loop, normalize, playDrums;
     EditText search;
     ListView list;
 
@@ -152,6 +153,27 @@ public class MainActivity extends Activity {
     final Runnable delayedMonitor = this::startMonitor;
     float currentGain = 1f;
     int bpm, recordingBpm;
+    /** Bicie počas nahrávania: štýl a doba, na ktorej nahrávka začala (NaN = nehrali). */
+    String recordingDrums = "";
+    double recordingBeat = Double.NaN;
+    /** Poloha prehrávača pre bicie, ktoré idú za nahrávkou. */
+    volatile int clockPos;
+    volatile long clockAt;
+    volatile boolean clockPlaying;
+    volatile float clockSpeed = 1;
+    final Drums.Clock playerClock = new Drums.Clock() {
+        public boolean playing() {
+            return clockPlaying;
+        }
+
+        public double positionMs() {
+            return clockPlaying ? clockPos + (SystemClock.uptimeMillis() - clockAt) * clockSpeed : clockPos;
+        }
+
+        public float speed() {
+            return clockSpeed;
+        }
+    };
     final List<Long> taps = new ArrayList<>();
 
     MediaPlayer player;
@@ -277,6 +299,19 @@ public class MainActivity extends Activity {
             if (METRONOME.running()) METRONOME.stop();
             else startMetronome();
             showTools();
+        });
+        DRUMS.style = prefs.getInt("drumStyle", 0);
+        DRUMS.fillBars = Drums.FILL_BARS[Math.max(0, Math.min(prefs.getInt("drumFill", 1), Drums.FILL_BARS.length - 1))];
+        DRUMS.volume = prefs.getInt("drumVolume", 80) / 100f;
+        if (!DRUMS.following()) DRUMS.bpm = bpm;
+        drumChip.setOnClickListener(v -> {
+            if (DRUMS.running() && !DRUMS.following()) DRUMS.stop();
+            else startDrums(false);
+            showTools();
+        });
+        drumChip.setOnLongClickListener(v -> {
+            drumDialog();
+            return true;
         });
         metroChip.setOnLongClickListener(v -> {
             tempoDialog();
@@ -431,6 +466,8 @@ public class MainActivity extends Activity {
         recHint = findViewById(R.id.recHint);
         tools = findViewById(R.id.tools);
         metroChip = findViewById(R.id.metroChip);
+        drumChip = findViewById(R.id.drumChip);
+        playDrums = findViewById(R.id.playDrums);
         countChip = findViewById(R.id.countChip);
         tunerPanel = findViewById(R.id.tunerPanel);
         tunerView = findViewById(R.id.tunerView);
@@ -506,7 +543,10 @@ public class MainActivity extends Activity {
         lastLevelAt = 0;
         if (!engine.recording() && !testing) {
             engine.stop();
-            if (!counting) METRONOME.stop();
+            if (!counting) {
+                METRONOME.stop();
+                if (!DRUMS.following()) DRUMS.stop();
+            }
             level.clear();
             live.clear();
             levelText.setText("");
@@ -656,6 +696,11 @@ public class MainActivity extends Activity {
         countChip.setBackgroundResource(count ? R.drawable.bg_chip_on : R.drawable.bg_chip);
         countChip.setText(count ? "Odpočet ✓" : "Odpočet");
         tunerButton.setBackgroundResource(tunerOn ? R.drawable.bg_circle_on : R.drawable.bg_circle);
+        boolean drums = DRUMS.running() && !DRUMS.following();
+        drumChip.setText("🥁 " + Drums.STYLES[prefs.getInt("drumStyle", 0)] + (drums ? "  ●" : ""));
+        drumChip.setBackgroundResource(drums ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+        drumChip.setContentDescription("Bicie " + Drums.STYLES[prefs.getInt("drumStyle", 0)] + ", "
+                + (drums ? "hrajú" : "vypnuté") + ". Podržaním vyberiete štýl.");
     }
 
     // ---- Vstupy ----
@@ -1019,6 +1064,7 @@ public class MainActivity extends Activity {
     // ---- Metronóm ----
 
     void startMetronome() {
+        DRUMS.stop();
         METRONOME.bpm = bpm;
         METRONOME.start(metronomeDevice());
     }
@@ -1027,6 +1073,7 @@ public class MainActivity extends Activity {
         bpm = Math.max(30, Math.min(300, value));
         prefs.edit().putInt("bpm", bpm).apply();
         METRONOME.bpm = bpm;
+        if (!DRUMS.following()) DRUMS.bpm = bpm;
         showTools();
     }
 
@@ -1061,6 +1108,91 @@ public class MainActivity extends Activity {
                 .setView(box)
                 .setPositiveButton("Hotovo", (d, w) -> setBpm(picker.getValue()))
                 .setNegativeButton("Zrušiť", null)
+                .show();
+    }
+
+    /** Bicie namiesto metronómu; idú tam, kam metronóm. */
+    void startDrums(boolean countIn) {
+        METRONOME.stop();
+        stopFollowing();
+        DRUMS.bpm = bpm;
+        DRUMS.start(this, metronomeDevice(), countIn);
+    }
+
+    /** Štýl, prechody, hlasitosť a tempo bicích; zmeny počuť hneď. */
+    void drumDialog() {
+        float d = getResources().getDisplayMetrics().density;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Math.round(20 * d), Math.round(8 * d), Math.round(20 * d), 0);
+        android.widget.RadioGroup styles = new android.widget.RadioGroup(this);
+        for (int i = 0; i < Drums.STYLES.length; i++) {
+            android.widget.RadioButton b = new android.widget.RadioButton(this);
+            b.setId(View.generateViewId());
+            b.setText(Drums.STYLES[i]);
+            b.setMinHeight(Math.round(44 * d));
+            int style = i;
+            b.setOnCheckedChangeListener((x, on) -> {
+                if (!on) return;
+                prefs.edit().putInt("drumStyle", style).apply();
+                if (!DRUMS.following()) DRUMS.style = style;
+                showTools();
+            });
+            styles.addView(b);
+            if (i == prefs.getInt("drumStyle", 0)) b.setChecked(true);
+        }
+        box.addView(styles);
+        TextView fillLabel = new TextView(this);
+        fillLabel.setText("Prechod");
+        fillLabel.setPadding(0, Math.round(12 * d), 0, 0);
+        box.addView(fillLabel);
+        Spinner fills = new Spinner(this);
+        ArrayAdapter<String> fa = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, Drums.FILLS);
+        fa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        fills.setAdapter(fa);
+        fills.setSelection(Math.max(0, Math.min(prefs.getInt("drumFill", 1), Drums.FILLS.length - 1)));
+        fills.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+                prefs.edit().putInt("drumFill", pos).apply();
+                DRUMS.fillBars = Drums.FILL_BARS[pos];
+            }
+
+            public void onNothingSelected(AdapterView<?> p) {
+            }
+        });
+        box.addView(fills);
+        TextView volLabel = new TextView(this);
+        volLabel.setText("Hlasitosť");
+        volLabel.setPadding(0, Math.round(12 * d), 0, 0);
+        box.addView(volLabel);
+        SeekBar vol = new SeekBar(this);
+        vol.setMax(100);
+        vol.setProgress(prefs.getInt("drumVolume", 80));
+        vol.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar b, int value, boolean user) {
+                prefs.edit().putInt("drumVolume", value).apply();
+                DRUMS.volume = value / 100f;
+            }
+
+            public void onStartTrackingTouch(SeekBar b) {
+            }
+
+            public void onStopTrackingTouch(SeekBar b) {
+            }
+        });
+        box.addView(vol, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(44 * d)));
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(box);
+        new AlertDialog.Builder(this)
+                .setTitle("Bicie")
+                .setView(scroll)
+                .setPositiveButton("Hotovo", null)
+                .setNeutralButton("Tempo " + bpm, (x, w) -> tempoDialog())
+                .setNegativeButton(DRUMS.running() && !DRUMS.following() ? "Zastaviť" : "Hrať", (x, w) -> {
+                    if (DRUMS.running() && !DRUMS.following()) DRUMS.stop();
+                    else startDrums(false);
+                    showTools();
+                })
                 .show();
     }
 
@@ -1106,8 +1238,11 @@ public class MainActivity extends Activity {
     /** Odpočet jedného taktu metronómom, potom sa začne nahrávať. */
     void startCountIn() {
         counting = true;
-        boolean wasOn = METRONOME.running();
-        if (!wasOn) startMetronome();
+        boolean drums = DRUMS.running() && !DRUMS.following();
+        boolean wasOn = METRONOME.running() || drums;
+        // Hrajúce bicie odpočítajú paličkami a pokračujú; inak odpočíta metronóm.
+        if (drums) startDrums(true);
+        else if (!wasOn) startMetronome();
         int beats = METRONOME.beatsPerBar;
         long beatMs = 60000L / bpm;
         long now = SystemClock.uptimeMillis();
@@ -1132,6 +1267,7 @@ public class MainActivity extends Activity {
         ui.removeCallbacksAndMessages(COUNT_IN);
         counting = false;
         METRONOME.stop();
+        DRUMS.stop();
         showTools();
         banner.setVisibility(View.GONE);
         rec.setText("●");
@@ -1149,7 +1285,10 @@ public class MainActivity extends Activity {
             notice("Nahrávanie sa nedá spustiť.", "Podrobnosti", () -> showSettings(true));
             return;
         }
-        recordingBpm = METRONOME.running() || counted ? bpm : 0;
+        boolean drums = DRUMS.running() && !DRUMS.following();
+        recordingBpm = METRONOME.running() || drums || counted ? bpm : 0;
+        recordingDrums = drums ? Drums.STYLES[DRUMS.style] : "";
+        recordingBeat = drums ? DRUMS.audibleBeat() : Double.NaN;
         RecordingService.start(this);
         setRecordingUi(true);
         tick();
@@ -1166,6 +1305,8 @@ public class MainActivity extends Activity {
         rec.setEnabled(false);
         RecordingService.stop(this);
         int tempo = recordingBpm;
+        Groove groove = recordingDrums.isEmpty() || Double.isNaN(recordingBeat) ? null
+                : new Groove(recordingDrums, recordingBeat, false);
         long since = engine.recordingSince();
         IO.execute(() -> {
             Engine.Recorded r = null;
@@ -1173,7 +1314,7 @@ public class MainActivity extends Activity {
                 r = engine.stopRecording();
                 if (r != null) {
                     String name = "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(since));
-                    String saved = save(r.file, name, tempo);
+                    String saved = save(r.file, name, tempo, groove);
                     ui.post(() -> notice("Uložené: " + label(saved), null, null));
                 }
             } catch (Exception e) {
@@ -1202,7 +1343,10 @@ public class MainActivity extends Activity {
             return;
         }
         retro.setEnabled(false);
-        int tempo = METRONOME.running() ? bpm : 0;
+        boolean drums = DRUMS.running() && !DRUMS.following();
+        int tempo = METRONOME.running() || drums ? bpm : 0;
+        double beatNow = drums ? DRUMS.audibleBeat() : Double.NaN;
+        Groove groove = Double.isNaN(beatNow) ? null : new Groove(Drums.STYLES[DRUMS.style], beatNow, true);
         long now = System.currentTimeMillis();
         IO.execute(() -> {
             File temp = new File(getCacheDir(), "spatne-" + now + ".wav");
@@ -1211,7 +1355,7 @@ public class MainActivity extends Activity {
                 if (r == null) {
                     ui.post(() -> notice("Ešte nie je čo uložiť.", null, null));
                 } else {
-                    String saved = save(temp, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)) + " spätne", tempo);
+                    String saved = save(temp, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)) + " spätne", tempo, groove);
                     ui.post(() -> notice("Uložené: " + label(saved), null, null));
                 }
             } catch (Exception e) {
@@ -1234,7 +1378,26 @@ public class MainActivity extends Activity {
      * Uloží nahrávku do Hudba/Riffy, kde ju vidia aj iné aplikácie; podľa nastavenia oreže ticho.
      * Vráti meno, pod ktorým sa uložila.
      */
-    String save(File temp, String name, int tempo) throws IOException {
+    /** Bicie, ktoré hrali pri nahrávaní: štýl a doba na začiatku (alebo na konci) nahrávky. */
+    static final class Groove {
+        final String style;
+        final double beat;
+        final boolean atEnd;
+
+        Groove(String style, double beat, boolean atEnd) {
+            this.style = style;
+            this.beat = beat;
+            this.atEnd = atEnd;
+        }
+    }
+
+    /** Kde (ms) je v nahrávke prvá doba taktu, ak jej začiatok padol na dobu startBeat. */
+    static int firstBeatMs(double startBeat, int bpm) {
+        double toBar = Math.floorMod((long) Math.floor(-startBeat * 1000), 4000) / 1000.0;
+        return (int) Math.round(toBar * 60000.0 / bpm);
+    }
+
+    String save(File temp, String name, int tempo, Groove groove) throws IOException {
         long[] range;
         Wav.Info format;
         try (InputStream in = new FileInputStream(temp)) {
@@ -1269,6 +1432,12 @@ public class MainActivity extends Activity {
         if (tempo > 0) {
             Meta.Info i = meta.get(saved);
             i.bpm = tempo;
+            if (groove != null) {
+                double seconds = groove.atEnd ? format.frames() / (double) format.rate : 0;
+                double start = groove.beat - seconds * tempo / 60.0 + range[0] / (double) format.rate * tempo / 60.0;
+                i.drums = groove.style;
+                i.beat0 = firstBeatMs(start, tempo);
+            }
             meta.put(saved, i);
             embed(uri, i);
         }
@@ -1585,6 +1754,7 @@ public class MainActivity extends Activity {
             ((TextView) v.findViewById(R.id.rowTitle)).setText(label(r.name));
             StringBuilder line = new StringBuilder(clock(r.duration));
             if (r.info.bpm > 0) line.append(" · ").append(r.info.bpm).append(" BPM");
+            if (!r.info.drums.isEmpty()) line.append(" · 🥁 ").append(r.info.drums);
             if (!r.info.key.isEmpty()) line.append(" · ").append(r.info.key);
             if (!r.info.note.isEmpty()) line.append("\n").append(r.info.note);
             ((TextView) v.findViewById(R.id.rowMeta)).setText(line);
@@ -1653,6 +1823,11 @@ public class MainActivity extends Activity {
 
             public void onNothingSelected(AdapterView<?> p) {
             }
+        });
+        playDrums.setChecked(prefs.getBoolean("playDrums", false));
+        playDrums.setOnCheckedChangeListener((b, on) -> {
+            prefs.edit().putBoolean("playDrums", on).apply();
+            followPlayer();
         });
         loop.setChecked(prefs.getBoolean("loop", false));
         loop.setOnCheckedChangeListener((b, on) -> {
@@ -1740,6 +1915,11 @@ public class MainActivity extends Activity {
         }
         stopPlaying();
         if (engine.recording()) return;
+        // Voľne hrajúce bicie by išli mimo riffu; k riffu sa zapínajú v prehrávači.
+        if (DRUMS.running()) {
+            DRUMS.stop();
+            showTools();
+        }
         try {
             player = new MediaPlayer();
             player.setDataSource(this, r.uri());
@@ -1753,6 +1933,9 @@ public class MainActivity extends Activity {
             playerProgress.setMax(player.getDuration());
             playerWave.setPeaks(wave(r));
             playerPanel.setVisibility(View.VISIBLE);
+            playingRiff = r;
+            playDrums.setVisibility(r.info.bpm > 0 ? View.VISIBLE : View.GONE);
+            playDrums.setText("🥁 Bicie k riffu (" + drumStyleOf(r) + ", " + r.info.bpm + " BPM)");
             showLoop();
             showPlayerInfo();
             resume();
@@ -1767,6 +1950,8 @@ public class MainActivity extends Activity {
         if (player == null) return;
         player.start();
         applySpeed();
+        tickClock();
+        followPlayer();
         playPause.setText("⏸\uFE0E");
         ui.removeCallbacks(progress);
         ui.post(progress);
@@ -1777,6 +1962,7 @@ public class MainActivity extends Activity {
         if (player == null) return;
         if (player.isPlaying()) {
             player.pause();
+            tickClock();
             playPause.setText("▶\uFE0E");
             adapter.notifyDataSetChanged();
         } else {
@@ -1805,6 +1991,7 @@ public class MainActivity extends Activity {
             ended();
             pos = player.getCurrentPosition();
         }
+        tickClock();
         playerProgress.setProgress(pos);
         playerWave.setPosition(dur > 0 ? pos / (float) dur : -1);
         playerTime.setText(time(pos, 0) + " / " + time(dur, 0));
@@ -1848,6 +2035,8 @@ public class MainActivity extends Activity {
 
     void stopPlaying() {
         ui.removeCallbacks(progress);
+        playingRiff = null;
+        stopFollowing();
         if (player != null) {
             try {
                 player.stop();
@@ -1862,6 +2051,50 @@ public class MainActivity extends Activity {
             expandPlayer(false);
         }
         if (adapter != null) adapter.notifyDataSetChanged();
+    }
+
+    Riff playingRiff;
+
+    String drumStyleOf(Riff r) {
+        for (String s : Drums.STYLES) if (s.equals(r.info.drums)) return s;
+        return Drums.STYLES[prefs.getInt("drumStyle", 0)];
+    }
+
+    /** Poloha prehrávača pre bicie (MediaPlayer sa číta len tu, na hlavnom vlákne). */
+    void tickClock() {
+        if (player == null) {
+            clockPlaying = false;
+            return;
+        }
+        clockPos = player.getCurrentPosition();
+        clockAt = SystemClock.uptimeMillis();
+        clockSpeed = speed();
+        clockPlaying = player.isPlaying();
+    }
+
+    /** Bicie k prehrávanému riffu: v jeho tempe a štýle, od jeho prvej doby. */
+    void followPlayer() {
+        Riff r = playingRiff;
+        boolean want = r != null && r.info.bpm > 0 && playDrums.isChecked() && player != null;
+        if (!want) {
+            stopFollowing();
+            return;
+        }
+        if (DRUMS.following()) return;
+        METRONOME.stop();
+        DRUMS.bpm = r.info.bpm;
+        DRUMS.style = java.util.Arrays.asList(Drums.STYLES).indexOf(drumStyleOf(r));
+        tickClock();
+        DRUMS.follow(this, playbackDevice(), playerClock, Math.max(0, r.info.beat0));
+        showTools();
+    }
+
+    void stopFollowing() {
+        if (!DRUMS.following()) return;
+        DRUMS.stop();
+        DRUMS.bpm = bpm;
+        DRUMS.style = prefs.getInt("drumStyle", 0);
+        if (drumChip != null) showTools();
     }
 
     // ---- Ladička ----
@@ -2352,7 +2585,7 @@ public class MainActivity extends Activity {
                 long frames = Wav.repair(f);
                 long started = Long.parseLong(n.substring(9, n.length() - 4));
                 if (frames > 22050) {
-                    save(f, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(started)) + " obnovené", 0);
+                    save(f, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(started)) + " obnovené", 0, null);
                     saved++;
                 }
             } catch (Exception ignored) {
