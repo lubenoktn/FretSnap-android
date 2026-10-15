@@ -17,7 +17,7 @@ import java.io.InputStream;
  */
 final class Drums {
     static final int RATE = 48000;
-    static final String[] FILLS = {"každé 4 takty", "každých 8 taktov", "bez prechodov"};
+    static String[] FILLS = {"každé 4 takty", "každých 8 taktov", "bez prechodov"};
     static final int[] FILL_BARS = {4, 8, 0};
     /** Čo hrá: nič (len slučka), metronóm, bicie. */
     static final int OFF = 0, CLICK = 1, DRUMS = 2;
@@ -133,6 +133,14 @@ final class Drums {
 
     static {
         for (int i = 0; i < PATTERNS.length; i++) STYLES[i] = PATTERNS[i].name;
+    }
+
+    /** Názvy štýlov na obrazovke (v jazyku aplikácie); STYLES sú uložené v riffoch a nemenia sa. */
+    static String[] NAMES = STYLES.clone();
+
+    static String display(String style) {
+        int i = styleIndex(style);
+        return i >= 0 && i < NAMES.length ? NAMES[i] : style;
     }
 
     static int styleIndex(String name) {

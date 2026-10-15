@@ -68,7 +68,7 @@ final class Updates {
                 c.setConnectTimeout(8000);
                 c.setReadTimeout(8000);
                 c.setRequestProperty("Accept", "application/vnd.github+json");
-                if (c.getResponseCode() != 200) throw new Exception("GitHub odpovedal " + c.getResponseCode());
+                if (c.getResponseCode() != 200) throw new Exception(a.getString(R.string.github_answered, c.getResponseCode()));
                 JSONObject r;
                 try (InputStream in = c.getInputStream()) {
                     ByteArrayOutputStream b = new ByteArrayOutputStream();
@@ -89,21 +89,20 @@ final class Updates {
                     ui.post(() -> {
                         if (a.isFinishing()) return;
                         new AlertDialog.Builder(a)
-                                .setTitle("Nová verzia " + tag.replaceFirst("^[vV]", ""))
-                                .setMessage((notes.isEmpty() ? "" : notes + "\n\n") + "Máte verziu " + mine
-                                        + ". Po stiahnutí APK otvorte a nainštalujte cez starú verziu; nahrávky ostanú.")
-                                .setPositiveButton("Stiahnuť", (d, w) ->
+                                .setTitle(a.getString(R.string.new_version, tag.replaceFirst("^[vV]", "")))
+                                .setMessage((notes.isEmpty() ? "" : notes + "\n\n") + a.getString(R.string.update_msg, mine))
+                                .setPositiveButton(R.string.download, (d, w) ->
                                         a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(download))))
-                                .setNegativeButton("Neskôr", null)
+                                .setNegativeButton(R.string.later, null)
                                 .show();
                     });
                 } else if (!quiet) {
-                    ui.post(() -> Toast.makeText(a, "Máte najnovšiu verziu " + mine + ".", Toast.LENGTH_SHORT).show());
+                    ui.post(() -> Toast.makeText(a, a.getString(R.string.up_to_date, mine), Toast.LENGTH_SHORT).show());
                 }
             } catch (Exception e) {
                 if (!quiet) {
                     String msg = e.getMessage();
-                    ui.post(() -> Toast.makeText(a, "Aktualizácie sa nedajú overiť: " + msg, Toast.LENGTH_LONG).show());
+                    ui.post(() -> Toast.makeText(a, a.getString(R.string.update_failed, msg), Toast.LENGTH_LONG).show());
                 }
             }
         }, "aktualizacie").start();

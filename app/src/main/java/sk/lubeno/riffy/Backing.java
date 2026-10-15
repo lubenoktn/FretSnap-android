@@ -12,7 +12,7 @@ final class Backing {
     static final String[] SUFFIX = {"", "m", "7"};
 
     /** Hotové postupy: názov a akordy ako {posun od tóniky, druh}; pri blues je akord na takt. */
-    static final String[] PRESETS = {"I–V–vi–IV (pop)", "vi–IV–I–V (balada)", "I–♭VII–IV (rock)",
+    static String[] PRESETS = {"I–V–vi–IV (pop)", "vi–IV–I–V (balada)", "I–♭VII–IV (rock)",
             "12-taktový blues", "i–VI–III–VII (mol)", "i–iv–v (mol)", "i–VII–VI–V (andalúzska)"};
     static final int[][][] PRESET_CHORDS = {
             {{0, MAJOR}, {7, MAJOR}, {9, MINOR}, {5, MAJOR}},

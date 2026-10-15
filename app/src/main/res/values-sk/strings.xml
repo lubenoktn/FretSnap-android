@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="input_interrupted">Vstup prerušený</string>
+    <string name="input">Vstup</string>
+    <string name="starting_up">Zapína sa…</string>
+    <string name="input_broken">Vstup nefunguje</string>
+    <string name="input_cant_open">Vstup sa nedá otvoriť.</string>
+    <string name="details">Podrobnosti</string>
+    <string name="input_off">Vstup vypnutý</string>
+    <string name="mark_n">📍 Značka %1$s</string>
+    <string name="manual_cant_open">Návod sa nedá otvoriť.</string>
+    <string name="tap_stop_auto">Ťuknutím zastavíte a uložíte · samo sa zastaví po 4 s ticha</string>
+    <string name="tap_stop">Ťuknutím zastavíte a uložíte</string>
+    <string name="stop_save">Zastaviť a uložiť</string>
+    <string name="record">Nahrávať</string>
+    <string name="metro_desc">Metronóm %1$d BPM, %2$s. Podržaním nastavíte tempo.</string>
+    <string name="on">zapnutý</string>
+    <string name="off">vypnutý</string>
+    <string name="count_in">Odpočet</string>
+    <string name="count_in_on">Odpočet ✓</string>
+    <string name="lead_in_on">Rozbeh %1$d ✓</string>
+    <string name="backing_chip">🎹 Sprievod</string>
+    <string name="drums_desc">Bicie %1$s, %2$s. Podržaním vyberiete štýl.</string>
+    <string name="playing">hrajú</string>
+    <string name="stopped">vypnuté</string>
+    <string name="type_mic">vstavaný mikrofón</string>
+    <string name="type_headset">slúchadlá s mikrofónom</string>
+    <string name="type_n">typ %1$d</string>
+    <string name="direct_usb">%1$s – priamo cez USB</string>
+    <string name="via_android">%1$s – cez Android</string>
+    <string name="info_direct">Aplikácia číta zariadenie sama, zvukový systém Androidu obchádza. Zdroj, formát a kanály sa tu nepoužijú.</string>
+    <string name="info_none">Telefón nehlási žiadny vstup.</string>
+    <string name="info_no_usb">USB zariadenie Android nevidí. Skontrolujte kábel a OTG.\n</string>
+    <string name="info_caps">Kanály: %1$s   Vzorkovanie: %2$s Hz</string>
+    <string name="any">ľubovoľné</string>
+    <string name="unknown_input">neznámy vstup</string>
+    <string name="describe">%1$s, zdroj „%2$s“, %3$s, %4$d Hz, %5$s</string>
+    <string name="stereo">stereo</string>
+    <string name="mono">mono</string>
+    <string name="not_routed">\nPozor: Android nepustil zvolený vstup.</string>
+    <string name="allow_usb_long">Povoľte aplikácii prístup k USB zariadeniu.</string>
+    <string name="allow_usb">Povoľte prístup k USB</string>
+    <string name="cant_open_setting">S týmto nastavením sa vstup nedá otvoriť.</string>
+    <string name="acoustic_info">\nAkustická gitara: bez úprav pre hovor, filter dunenia pod 60 Hz</string>
+    <string name="no_mic_permission">Bez povolenia mikrofónu</string>
+    <string name="waiting_device">Čakám, kým sa zariadenie zapne…</string>
+    <string name="connecting">Pripája sa…</string>
+    <string name="gain">Zosilnenie %1$s dB ▾</string>
+    <string name="clipping">"   ⚠ prebudené, uberte"</string>
+    <string name="tempo_locked">Tempo sa nedá zmeniť, kým je v looperi slučka.</string>
+    <string name="clear">Vymazať</string>
+    <string name="tap_tempo">Ťukajte do rytmu</string>
+    <string name="tempo_bpm">Tempo (BPM)</string>
+    <string name="done">Hotovo</string>
+    <string name="cancel">Zrušiť</string>
+    <string name="fill">Prechod</string>
+    <string name="volume">Hlasitosť</string>
+    <string name="drums">Bicie</string>
+    <string name="tempo_n">Tempo %1$d</string>
+    <string name="stop">Zastaviť</string>
+    <string name="play">Hrať</string>
+    <string name="tone_test">Skúšobný tón</string>
+    <string name="tone_not_connected">ToneX práve nie je pripojený cez vlastný ovládač (USB). Zapojte ho a skúste znova.</string>
+    <string name="close">Zavrieť</string>
+    <string name="usb_output">Výstup do USB: %1$s</string>
+    <string name="tone_heard">Zazneli v slúchadlách ToneX tri pípnutia?\n\n</string>
+    <string name="tone_failed">Do ToneX sa zvuk poslať nepodarilo.\n\n</string>
+    <string name="tone_output">Výstup: %1$s\n\nAk nič nepočuť, pošlite Popis USB.</string>
+    <string name="usb_report">Popis USB</string>
+    <string name="input_starting">Vstup sa ešte spúšťa, skúste o chvíľu.</string>
+    <string name="bleed_warning">Bicie hrajú z reproduktora a mikrofón ich nahrá tiež. Na nahrávanie s bicími použite slúchadlá do kábla.</string>
+    <string name="got_it">Rozumiem</string>
+    <string name="count_n">Odpočet %1$d   (ťuknutím zrušíte)</string>
+    <string name="lead_bar">Rozbeh – takt %1$d z %2$d   (ťuknutím zrušíte)</string>
+    <string name="cant_start_rec">Nahrávanie sa nedá spustiť.</string>
+    <string name="recording_banner">●  Nahrávam</string>
+    <string name="save_error">Chyba pri ukladaní: %1$s</string>
+    <string name="save_failed">Nahrávku sa nepodarilo uložiť.</string>
+    <string name="input_not_running">Vstup nebeží.</string>
+    <string name="nothing_to_save">Ešte nie je čo uložiť.</string>
+    <string name="suffix_retro">" spätne"</string>
+    <string name="allow_tap_again">Povoľte prístup a ťuknite znova.</string>
+    <string name="reading_usb">Hrajte na gitare, asi 5 sekúnd skúšam čítať z USB…</string>
+    <string name="phone_line">Telefón: %1$s %2$s, Android %3$s\n</string>
+    <string name="usb_report_title">Popis USB zariadenia</string>
+    <string name="send">Poslať</string>
+    <string name="usb_report_subject">Riffy – popis USB zariadenia</string>
+    <string name="send_report">Poslať popis</string>
+    <string name="test_not_started">nespustilo sa — %1$s</string>
+    <string name="test_recorded_from">" (nahrávalo z: %1$s)"</string>
+    <string name="input_test">Skúška vstupu</string>
+    <string name="input_test_msg">Aplikácia vyskúša všetky nastavenia, každé asi na sekundu a pol. Celý čas, asi 45 sekúnd, hrajte na gitare (napríklad držte akord a opakovane brnkajte).</string>
+    <string name="start">Začať</string>
+    <string name="stop_test">Zastaviť skúšku</string>
+    <string name="testing_n">Skúšam %1$d z %2$d: %3$s</string>
+    <string name="find_setup">Nájsť nastavenie</string>
+    <string name="input_line">Vstup: %1$s\n\n</string>
+    <string name="unknown">neznámy</string>
+    <string name="best_works">Najlepšie funguje: %1$s.\n\n</string>
+    <string name="nothing_works">Zo žiadneho nastavenia neprišiel zo zvoleného vstupu použiteľný zvuk (hlasnejší než -60 dB).\n\n</string>
+    <string name="test_result">Výsledok skúšky</string>
+    <string name="send_result">Poslať výsledok</string>
+    <string name="test_subject">Riffy – výsledok skúšky vstupu</string>
+    <string name="use">Použiť</string>
+    <string name="empty_none">Zatiaľ tu nie sú žiadne riffy.\nNahrajte prvý veľkým červeným tlačidlom.</string>
+    <string name="empty_fav">Žiadne obľúbené riffy.\nHviezdičkou pri riffe ho pridáte.</string>
+    <string name="empty_songs">Žiadne piesne.\nRiff zaradíte do piesne cez ⋮ → Pieseň.</string>
+    <string name="empty_search">Nič sa nenašlo.</string>
+    <string name="today">Dnes</string>
+    <string name="yesterday">Včera</string>
+    <string name="date_format">d. M. yyyy</string>
+    <string name="file_cant_open">Súbor sa nedá otvoriť.</string>
+    <string name="collapse_player">Zbaliť prehrávač</string>
+    <string name="expand_player">Rozbaliť prehrávač</string>
+    <string name="drums_with">🥁 Bicie k riffu (%1$s, %2$d BPM)</string>
+    <string name="drums_detect">🥁 Bicie k riffu (tempo zistím z hrania)</string>
+    <string name="cant_play">Nahrávka sa nedá prehrať.</string>
+    <string name="loop_whole">Slučka: celá nahrávka · potiahnutím po vlnke vyznačíte časť</string>
+    <string name="loop_range">Slučka: %1$s – %2$s</string>
+    <string name="end">koniec</string>
+    <string name="auto_hint">Automatické nahrávanie: začne sa, keď začnete hrať.</string>
+    <string name="loop_len_locked">Dĺžku zmeníte, keď slučku vymažete.</string>
+    <string name="loop">Slučka</string>
+    <string name="save_as_riff">Uložiť ako riff</string>
+    <string name="clear_loop">Vymazať slučku</string>
+    <string name="finish_recording_first">Najprv dokončite nahrávanie.</string>
+    <string name="looper_cant_start">Looper sa nedá spustiť, skúste znova.</string>
+    <string name="loop_get_ready">Pripravte sa: po odpočte sa nahrá presne %1$s. Nemusíte nič stláčať.</string>
+    <string name="loop_play_one">Hrajte. Nahrávanie skončí samo na konci taktu a slučka začne hrať dookola.</string>
+    <string name="loop_play_more">Hrajte. Nahrávanie skončí samo na konci posledného taktu a slučka začne hrať dookola.</string>
+    <string name="loop_armed">Ďalšia vrstva sa začne nahrávať od začiatku slučky, presne na jedno kolo.</string>
+    <string name="loop_overdub">Nahrávam vrstvu, skončí sa sama na konci kola.</string>
+    <string name="loop_record">● Nahrať slučku</string>
+    <string name="loop_intro">Zvoľte dĺžku slučky. Po ťuknutí zaznie odpočet a nahrá sa presne %1$s v tempe %2$d. Metronóm alebo bicie si môžete zapnúť aj počas hrania.</string>
+    <string name="loop_play">▶ Pustiť slučku</string>
+    <string name="loop_ready">Slučka je pripravená. Po odpočte bude hrať dookola.</string>
+    <string name="loop_add">● Pridať vrstvu</string>
+    <string name="loop_playing">Slučka hrá dookola. Ďalšia vrstva sa nahrá presne na jedno kolo od jej začiatku. Späť odoberie poslednú vrstvu; ⋮ ju uloží ako riff.</string>
+    <string name="loop_empty">Slučka je prázdna.</string>
+    <string name="loop_name">Slučka</string>
+    <string name="loop_save_failed">Slučku sa nepodarilo uložiť.</string>
+    <string name="whole_neck">Celý hmatník</string>
+    <string name="position_n">Poloha %1$d</string>
+    <string name="scale_text">%1$s %2$s: %3$s   ·   ladenie %4$s</string>
+    <string name="detecting_key">Zisťujem tóninu…</string>
+    <string name="key_not_found">Tóninu sa nepodarilo zistiť – vyberte ju v paneli stupnice.</string>
+    <string name="riff_key">Tónina riffu: %1$s (zmeniť ju môžete v paneli)</string>
+    <string name="minor_key">%1$s mol</string>
+    <string name="major_key">%1$s dur</string>
+    <string name="key_chip">Tónina: %1$s ▾</string>
+    <string name="chord_1bar">Akord na 1 takt</string>
+    <string name="chord_2bars">Akord na 2 takty</string>
+    <string name="bass">Basa</string>
+    <string name="keys">Klávesy</string>
+    <string name="drums_chip">Bicie: %1$s</string>
+    <string name="stop_btn">■ Zastaviť</string>
+    <string name="play_btn">▶ Hrať</string>
+    <string name="backing_playing">Hrá v tempe %1$d. Ťuknutím na akord ho zmeníte. Stupnica k tomu ukáže, čo sa hodí do sóla – zelené sú tóny práve hraného akordu.</string>
+    <string name="backing_idle">Vyberte postup a tóninu, potom Hrať. Štýl bicích a tempo nastavíte podržaním 🥁 a ♩. Sprievod sedí aj s looperom.</string>
+    <string name="backing_key">Tónina sprievodu</string>
+    <string name="remove">Odstrániť</string>
+    <string name="add_chord">Pridať akord</string>
+    <string name="change_chord">Zmeniť akord</string>
+    <string name="play_string">Zahrajte jednu strunu.</string>
+    <string name="signal_silent">Signál: ticho – ladička nič nepočuje</string>
+    <string name="signal_db">Signál: %1$s dB</string>
+    <string name="no_clear_pitch">Počujem zvuk, ale nie jasný tón – zahrajte jednu strunu.</string>
+    <string name="string_n">"%1$d. struna · "</string>
+    <string name="tuner_line">%1$s%2$s centov   %3$s Hz   %4$s</string>
+    <string name="in_tune">naladené</string>
+    <string name="tune_up">pritiahnuť</string>
+    <string name="tune_down">povoliť</string>
+    <string name="fav_remove">☆ Odobrať z obľúbených</string>
+    <string name="fav_add">★ Pridať k obľúbeným</string>
+    <string name="opt_info">Poznámka, tempo, tónina</string>
+    <string name="opt_tone">🎛 Zvuk (ToneX)</string>
+    <string name="opt_tone_is">🎛 Zvuk: %1$s</string>
+    <string name="opt_song">🎵 Zaradiť do piesne</string>
+    <string name="opt_song_is">🎵 Pieseň: %1$s</string>
+    <string name="opt_up">↑ Posunúť v piesni vyššie</string>
+    <string name="opt_down">↓ Posunúť v piesni nižšie</string>
+    <string name="rename">Premenovať</string>
+    <string name="opt_scale">🎼 Stupnica a tónina</string>
+    <string name="opt_tempo_again">Zistiť tempo znova z hrania</string>
+    <string name="opt_tempo">Zistiť tempo z hrania</string>
+    <string name="opt_wav">Poslať ako WAV (plná kvalita)</string>
+    <string name="opt_m4a">Poslať ako M4A (menší súbor)</string>
+    <string name="opt_drums">🥁 Poslať s bicími (M4A)</string>
+    <string name="opt_test">Poslať na test (Disk)</string>
+    <string name="delete">Zmazať</string>
+    <string name="nothing_to_backup">Nič nové na zálohovanie.</string>
+    <string name="backup">Zálohovať</string>
+    <string name="backup_never">Zatiaľ nezálohované.</string>
+    <string name="backup_last">Posledná záloha: %1$s.</string>
+    <string name="datetime_format">d. M. yyyy H:mm</string>
+    <string name="backup_info">" Nových riffov: %1$d. Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka „Riffy záloha“. Poznámky, tempo, piesne a značky sú uložené priamo v súboroch."</string>
+    <string name="backup_new">Zálohovať nové (%1$d)</string>
+    <string name="saved_n">Uložené: %1$s</string>
+    <string name="tone">Zvuk</string>
+    <string name="tone_hint">napr. Marshall crunch, preset 3</string>
+    <string name="recently_used">Naposledy použité</string>
+    <string name="tone_title">Zvuk (ToneX)</string>
+    <string name="save">Uložiť</string>
+    <string name="song_hint">Pieseň (napr. Nová pieseň)</string>
+    <string name="part_hint">Časť (napr. Sloha, Refrén, Sólo)</string>
+    <string name="song">Pieseň</string>
+    <string name="song_remove">Vyradiť</string>
+    <string name="detecting_tempo">Zisťujem tempo…</string>
+    <string name="tempo_not_found">Tempo sa nedalo zistiť (hrá sa voľne?). Zadajte ho v ⋮ → Poznámka, tempo.</string>
+    <string name="enter">Zadať</string>
+    <string name="tempo_found">Tempo %1$d BPM</string>
+    <string name="mixing">Miešam riff s bicími…</string>
+    <string name="with_drums_file">%1$s (bicie)</string>
+    <string name="with_drums_title">%1$s s bicími</string>
+    <string name="mix_failed">Zmiešanie sa nepodarilo: %1$s</string>
+    <string name="m4a_failed">M4A sa nepodarilo uložiť.</string>
+    <string name="note">Poznámka</string>
+    <string name="key_hint">Tónina (napr. Am)</string>
+    <string name="name_exists">Riff s menom „%1$s“ už existuje.</string>
+    <string name="rename_denied">Android nedovolil nahrávku premenovať.</string>
+    <string name="rename_failed">Túto nahrávku sa nedá premenovať: %1$s</string>
+    <string name="preparing_m4a">Pripravujem M4A…</string>
+    <string name="convert_failed">Prevod sa nepodaril: %1$s</string>
+    <string name="deleted_n">Zmazané: %1$s</string>
+    <string name="undo">Vrátiť</string>
+    <string name="cant_delete_some">Niektoré nahrávky sa nedajú zmazať.</string>
+    <string name="preparing_zip">Pripravujem ZIP…</string>
+    <string name="zip_failed_create">ZIP sa nepodarilo vytvoriť.</string>
+    <string name="notes_file">poznamky.txt</string>
+    <string name="zip_failed">ZIP sa nepodaril: %1$s</string>
+    <string name="test_hint">Napr. pražce alebo tabulatúra (nepovinné)</string>
+    <string name="what_played">Čo ste hrali?</string>
+    <string name="test_msg">Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka Riffy.</string>
+    <string name="send_for_test">Poslať na test</string>
+    <string name="i_played">Čo som hral:\n</string>
+    <string name="played_file">" - co som hral.txt"</string>
+    <string name="text_failed">Text sa nepodarilo uložiť.</string>
+    <string name="suffix_recovered">" obnovené"</string>
+    <string name="recovered_one">Obnovená prerušená nahrávka.</string>
+    <string name="recovered_n">Obnovené prerušené nahrávky: %1$d</string>
+    <string name="played_today">Dnes hrané %1$s</string>
+    <string name="weekday_format">EEE d. M.</string>
+    <string name="this_week">Tento týždeň: %1$s\n</string>
+    <string name="total">Spolu: %1$s\n</string>
+    <string name="streak">Dní po sebe: %1$d\n\n</string>
+    <string name="today_lower">dnes</string>
+    <string name="diary">Denník hrania</string>
+    <string name="version_n">Verzia %1$s</string>
+    <string name="shared_folder">Zdieľané</string>
+    <string name="channel_recording">Nahrávanie</string>
+    <string name="notif_title">Riffy nahráva</string>
+    <string name="notif_text">Ťuknutím sa vrátite do aplikácie.</string>
+    <string name="silence">ticho</string>
+    <string name="levels_lr">ľavý %1$s, pravý %2$s</string>
+    <string name="loop_starts_in">Začína o %1$d</string>
+    <string name="loop_now">Teraz!</string>
+    <string name="loop_rec">● Nahrávam</string>
+    <string name="loop_rec_layer">● Nahrávam vrstvu %1$d</string>
+    <string name="loop_bars">Slučka %1$s</string>
+    <string name="usb_interrupted">Prenos z USB sa prerušil (%1$s).</string>
+    <string name="driver_load">Ovládač sa nedá načítať: %1$s</string>
+    <string name="usb_cant_open">USB zariadenie sa nedá otvoriť.</string>
+    <string name="usb_no_input">V zariadení sa nenašiel zvukový vstup, ktorý by aplikácia vedela čítať.</string>
+    <string name="usb_where">%1$s priamo cez USB (vlastný ovládač), %2$d kan., %3$d bit, hodiny %4$d Hz</string>
+    <string name="usb_cant_start">Prenos z USB sa nedá spustiť.\n</string>
+    <string name="device_starting">Zariadenie sa ešte zapína, skúšam ho otvoriť znova…</string>
+    <string name="signal_from">Signál ide z: %1$s</string>
+    <string name="read_failed">Čítanie zo vstupu zlyhalo.</string>
+    <string name="write_failed">Nahrávka sa nedá zapisovať: %1$s</string>
+    <string name="input_not_yet">Vstup ešte nebeží.</string>
+    <string name="github_answered">GitHub odpovedal %1$d</string>
+    <string name="new_version">Nová verzia %1$s</string>
+    <string name="update_msg">Máte verziu %1$s. Po stiahnutí APK otvorte a nainštalujte cez starú verziu; nahrávky ostanú.</string>
+    <string name="download">Stiahnuť</string>
+    <string name="later">Neskôr</string>
+    <string name="up_to_date">Máte najnovšiu verziu %1$s.</string>
+    <string name="update_failed">Aktualizácie sa nedajú overiť: %1$s</string>
+    <string name="unsupported_wav">Nepodporovaný formát WAV.</string>
+    <string name="wav_short">WAV je kratší, než hlási hlavička.</string>
+    <string name="not_wav">Súbor nie je WAV.</string>
+    <string name="wav_no_data">Vo WAV chýbajú zvukové dáta.</string>
+    <string name="wav_no_format">Vo WAV chýba popis formátu.</string>
+    <string name="favorites">Obľúbené</string>
+    <string name="options">Možnosti</string>
+    <string name="guide">Návod</string>
+    <string name="settings">Nastavenia</string>
+    <string name="live_desc">Priebeh zvuku za posledných 30 sekúnd</string>
+    <string name="tuner_button">♪\nLadička</string>
+    <string name="mark_button">📍 Značka</string>
+    <string name="scale_chip">🎼 Stupnica</string>
+    <string name="a4_down">Komorné A nižšie</string>
+    <string name="a4_up">Komorné A vyššie</string>
+    <string name="scale_for_backing">🎼 Stupnica k tomu</string>
+    <string name="bars_label">Takty</string>
+    <string name="undo_layer">Späť</string>
+    <string name="clear_selection">Zrušiť výber</string>
+    <string name="to_test">Na test</string>
+    <string name="all">Všetky</string>
+    <string name="fav_filter">★ Obľúbené</string>
+    <string name="songs_filter">🎵 Piesne</string>
+    <string name="search">Hľadať</string>
+    <string name="search_hint">Názov, poznámka, tónina…</string>
+    <string name="close_player">Zavrieť prehrávač</string>
+    <string name="wave_desc">Priebeh nahrávky: ťuknutím skočíte, potiahnutím vyznačíte slučku</string>
+    <string name="speed">Rýchlosť</string>
+    <string name="repeat">Dookola</string>
+    <string name="add_mark">Pridať značku</string>
+    <string name="loop_start">Začiatok [</string>
+    <string name="loop_end">Koniec ]</string>
+    <string name="loop_all">Celý</string>
+    <string name="settings_back">←  Nastavenia</string>
+    <string name="source">Zdroj</string>
+    <string name="format">Formát</string>
+    <string name="acoustic">🎸 Akustická gitara cez mikrofón (bez úprav pre hovor, bez dunenia)</string>
+    <string name="recording_section">Nahrávanie</string>
+    <string name="trim">Orezať ticho na začiatku a konci</string>
+    <string name="normalize">Zarovnať hlasitosť riffov</string>
+    <string name="auto_rec">Nahrávať automaticky, keď začnem hrať (a zastaviť po 4 s ticha)</string>
+    <string name="screen_on">Počas nahrávania nechať zapnutú obrazovku</string>
+    <string name="metro_phone">Metronóm a bicie do telefónu (inak do ToneX)</string>
+    <string name="tone_test_btn">Skúšobný tón do ToneX</string>
+    <string name="appearance">Vzhľad a jazyk</string>
+    <string name="theme">Režim</string>
+    <string name="color">Farba</string>
+    <string name="backup_section">Záloha</string>
+    <string name="backup_new_btn">Zálohovať nové</string>
+    <string name="backup_all">Zálohovať všetko</string>
+    <string name="app_section">Aplikácia</string>
+    <string name="check_updates">Skontrolovať aktualizácie</string>
+    <string name="guide_back">←  Návod</string>
+    <string name="language">Jazyk</string>
+    <plurals name="bars">
+        <item quantity="one">%1$d takt</item>
+        <item quantity="few">%1$d takty</item>
+        <item quantity="many">%1$d taktu</item>
+        <item quantity="other">%1$d taktov</item>
+    </plurals>
+    <plurals name="riffs">
+        <item quantity="one">%1$d riff</item>
+        <item quantity="few">%1$d riffy</item>
+        <item quantity="many">%1$d riffu</item>
+        <item quantity="other">%1$d riffov</item>
+    </plurals>
+    <plurals name="selected">
+        <item quantity="one">%1$d vybraný</item>
+        <item quantity="few">%1$d vybrané</item>
+        <item quantity="many">%1$d vybraného</item>
+        <item quantity="other">%1$d vybraných</item>
+    </plurals>
+    <plurals name="days_in_row">
+        <item quantity="one">%1$d deň po sebe</item>
+        <item quantity="few">%1$d dni po sebe</item>
+        <item quantity="many">%1$d dňa po sebe</item>
+        <item quantity="other">%1$d dní po sebe</item>
+    </plurals>
+    <plurals name="layers">
+        <item quantity="one">%1$d vrstva</item>
+        <item quantity="few">%1$d vrstvy</item>
+        <item quantity="many">%1$d vrstvy</item>
+        <item quantity="other">%1$d vrstiev</item>
+    </plurals>
+    <string-array name="sources">
+        <item>automaticky</item>
+        <item>bez úprav</item>
+        <item>mikrofón</item>
+        <item>predvolený</item>
+        <item>hudobný výkon</item>
+        <item>rozpoznávanie reči</item>
+        <item>kamera</item>
+    </string-array>
+    <string-array name="channel_names">
+        <item>auto</item>
+        <item>mono</item>
+        <item>stereo</item>
+    </string-array>
+    <string-array name="song_parts">
+        <item>Intro</item>
+        <item>Sloha</item>
+        <item>Refrén</item>
+        <item>Bridge</item>
+        <item>Sólo</item>
+        <item>Outro</item>
+    </string-array>
+    <string-array name="drum_fills">
+        <item>každé 4 takty</item>
+        <item>každých 8 taktov</item>
+        <item>bez prechodov</item>
+    </string-array>
+    <string-array name="drum_styles">
+        <item>Rock</item>
+        <item>Metal</item>
+        <item>Reggae</item>
+        <item>Balada</item>
+        <item>Blues shuffle</item>
+        <item>Funk</item>
+        <item>Punk</item>
+        <item>6/8</item>
+        <item>3/4</item>
+    </string-array>
+    <string-array name="scale_names">
+        <item>Pentatonika mol</item>
+        <item>Pentatonika dur</item>
+        <item>Blues</item>
+        <item>Prirodzená mol</item>
+        <item>Dur</item>
+        <item>Dórska</item>
+        <item>Mixolydická</item>
+        <item>Harmonická mol</item>
+        <item>Frygická</item>
+    </string-array>
+    <string-array name="tuning_names">
+        <item>Štandard</item>
+        <item>Drop D</item>
+        <item>Eb (o poltón nižšie)</item>
+        <item>D štandard</item>
+        <item>Drop C</item>
+        <item>DADGAD</item>
+        <item>Open G</item>
+    </string-array>
+    <string-array name="backing_presets">
+        <item>I–V–vi–IV (pop)</item>
+        <item>vi–IV–I–V (balada)</item>
+        <item>I–♭VII–IV (rock)</item>
+        <item>12-taktový blues</item>
+        <item>i–VI–III–VII (mol)</item>
+        <item>i–iv–v (mol)</item>
+        <item>i–VII–VI–V (andalúzska)</item>
+    </string-array>
+    <string-array name="themes">
+        <item>podľa telefónu</item>
+        <item>tmavý</item>
+        <item>svetlý</item>
+    </string-array>
+    <string-array name="accents">
+        <item>modrá</item>
+        <item>zelená</item>
+        <item>oranžová</item>
+        <item>fialová</item>
+        <item>ružová</item>
+        <item>podľa tapety</item>
+    </string-array>
+    <string-array name="languages">
+        <item>Podľa telefónu</item>
+        <item>Slovenčina</item>
+        <item>English</item>
+    </string-array>
+</resources>

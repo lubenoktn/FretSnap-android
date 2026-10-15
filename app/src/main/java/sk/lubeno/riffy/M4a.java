@@ -19,7 +19,7 @@ final class M4a {
     static void convert(InputStream wav, File out) throws IOException {
         InputStream in = new BufferedInputStream(wav, 1 << 16);
         Wav.Info info = Wav.read(in);
-        if (info.bits != 16 && info.bits != 24 && info.bits != 32) throw new IOException("Nepodporovaný formát WAV.");
+        if (info.bits != 16 && info.bits != 24 && info.bits != 32) throw new IOException(Tr.s(R.string.unsupported_wav));
         int sb = info.bits / 8, fb = info.frameBytes();
         long left = info.frames();
 
@@ -102,7 +102,7 @@ final class M4a {
         int n = 0;
         while (n < b.length) {
             int r = in.read(b, n, b.length - n);
-            if (r < 0) throw new IOException("WAV je kratší, než hlási hlavička.");
+            if (r < 0) throw new IOException(Tr.s(R.string.wav_short));
             n += r;
         }
     }

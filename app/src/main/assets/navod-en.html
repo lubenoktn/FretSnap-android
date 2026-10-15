@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riffy guide</title>
+<style>
+  :root { --bg: #ffffff; --fg: #1d1d1f; --muted: #5f6368; --line: #e3e3e6; --panel: #f3f3f6; --accent: #1E88E5; }
+  html.dark { --bg: #1b1c20; --fg: #ececf0; --muted: #a0a3ab; --line: #34363d; --panel: #26282e; }
+  body { margin: 0; padding: 4px 16px 40px; background: var(--bg); color: var(--fg);
+         font: 16px/1.55 system-ui, -apple-system, Roboto, sans-serif; }
+  h1 { font-size: 26px; margin: 12px 0 4px; }
+  h2 { font-size: 20px; margin: 30px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 18px 0 4px; }
+  p, li { margin: 6px 0; }
+  ul, ol { padding-left: 22px; }
+  .lead { color: var(--muted); margin-bottom: 16px; }
+  .tip { background: var(--panel); border-left: 4px solid var(--accent); padding: 10px 12px; border-radius: 8px; margin: 12px 0; }
+  .key { display: inline-block; padding: 0 8px; border: 1px solid var(--accent); border-radius: 12px; white-space: nowrap; }
+  nav { background: var(--panel); border-radius: 12px; padding: 8px 14px; }
+  nav a { display: block; padding: 7px 0; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+  nav a:last-child { border-bottom: 0; }
+  a { color: var(--accent); }
+  dt { font-weight: 600; margin-top: 12px; }
+  dd { margin: 2px 0 0 0; color: var(--fg); }
+</style>
+</head>
+<body>
+
+<h1>Riffy – guide</h1>
+<p class="lead">Riffy records riffs from a ToneX Plug (and other USB audio interfaces) to your phone, helps you practice
+(tuner, metronome, drums, looper) and keeps your recordings organized.</p>
+
+<nav>
+  <a href="#start">1. Connecting ToneX</a>
+  <a href="#acoustic">1a. Acoustic guitar</a>
+  <a href="#screen">2. Main screen</a>
+  <a href="#recording">3. Recording</a>
+  <a href="#tuner">4. Tuner</a>
+  <a href="#rhythm">5. Metronome and drums</a>
+  <a href="#looper">6. Looper</a>
+  <a href="#backing">6a. Chord backing</a>
+  <a href="#scale">6b. Scale on the fretboard</a>
+  <a href="#list">7. Riff list</a>
+  <a href="#player">8. Player</a>
+  <a href="#songs">9. Songs</a>
+  <a href="#sharing">10. Sharing and backup</a>
+  <a href="#settings">11. Settings</a>
+  <a href="#problems">12. When something doesn't work</a>
+</nav>
+
+<h2 id="start">1. Connecting ToneX</h2>
+<ol>
+  <li>Plug the ToneX Plug into your phone (USB-C, or through an OTG adapter).</li>
+  <li>Android may ask whether Riffy may use the device – confirm. Riffy may also open by itself.</li>
+  <li>After a moment the label at the top shows <span class="key">ToneX Plug</span> in green. While it shows an orange
+      “Starting…”, ToneX is still waking up.</li>
+  <li>Play – the waveform and the level bar must move.</li>
+</ol>
+<div class="tip">Riffy reads ToneX directly over USB, because the phone's audio system doesn't let it through. That's why
+Android doesn't “see” ToneX while you use Riffy, and Riffy sends sound to its headphones itself (metronome, drums, looper).</div>
+
+<h2 id="acoustic">1a. Acoustic guitar (microphone)</h2>
+<ol>
+  <li>Without ToneX, Riffy records with the built-in microphone – the top label shows <span class="key">Built-in microphone</span>.</li>
+  <li>In ⚙ Settings turn on <span class="key">🎸 Acoustic guitar via microphone</span>. The phone then stops processing the sound
+      as it would for a phone call (noise suppression and automatic volume distort a guitar), and rumble below the
+      lowest guitar note is filtered out (tapping on the body, vibrations).</li>
+  <li>Place the phone about 30–50 cm (1–1.5 ft) from the guitar, with the microphone (bottom edge) pointing to where the
+      neck meets the body. If the level bar stays in the red while you play, move the phone away or lower the gain.</li>
+</ol>
+<div class="tip">The microphone also records the metronome, drums and backing coming from the speaker. Use wired
+headphones when recording with them (Bluetooth headphones lag). Riffy reminds you when you start recording.</div>
+
+<h2 id="screen">2. Main screen</h2>
+<dl>
+  <dt>Label at the top</dt><dd>Where the sound comes from: green = working, orange = starting, red = problem. Tap it to open the input settings.</dd>
+  <dt>Waveform “← 30 s”</dt><dd>What the input heard in the last 30 seconds – exactly what the ⟲ button saves. Newest is on the right, recorded parts are red.</dd>
+  <dt>Level bar</dt><dd>Green is fine, yellow is loud, red and a red edge = clipping. Channel levels are shown below it.</dd>
+  <dt>Gain ▾</dt><dd>Tap to show the slider; if the sound clips, turn it down.</dd>
+  <dt>Buttons</dt><dd>⟲ 30 s (save what just played), big ● (record), ♪ Tuner.</dd>
+  <dt>Tools</dt><dd>♩ metronome, 🥁 drums, Count-in / Lead-in; below them 🔁 Looper, 🎼 Scale, 🎹 Backing.
+      When a tool is open, it takes the place of the riff list (the list comes back when you close it).</dd>
+  <dt>Played today</dt><dd>How long you played today and how many days in a row. Tap it to open a two-week diary.</dd>
+</dl>
+
+<h2 id="recording">3. Recording</h2>
+<h3>Normal recording</h3>
+<ul>
+  <li>Tap the big <span class="key">●</span>. The button pulses, the screen edge glows red and the time runs in the middle.</li>
+  <li>Tap again (■) to stop recording; the riff is saved.</li>
+  <li>Recording continues with the screen off (there's a notification). The screen doesn't turn off by itself while recording unless you change that in the settings.</li>
+  <li>When saving, silence at the start and end is trimmed and the loudness is evened out so riffs are equally loud (both can be turned off).</li>
+</ul>
+<h3>Count-in and lead-in</h3>
+<p>The label below the record button switches with each tap: <span class="key">Count-in</span> (off) →
+<span class="key">Count-in ✓</span> → <span class="key">Lead-in 4 ✓</span>.</p>
+<ul>
+  <li><b>Count-in:</b> after tapping ●, one bar plays (metronome, or sticks if the drums are playing) and only then recording starts.</li>
+  <li><b>Lead-in:</b> first the drums play three bars (and the backing, if it's on) so you can get into the groove. In the fourth
+    bar the drums stop and the sticks count 4 – 3 – 2 – 1 while the numbers appear on screen. Recording starts on the first
+    beat of the fifth bar and the drums keep playing. With the metronome it's the same, only the metronome clicks more quietly during the lead-in.</li>
+</ul>
+<p>Tap the button during the count to cancel it. The tempo is saved with the riff.</p>
+<h3>⟲ 30 s – save after the fact</h3>
+<p>Played something good while not recording? Tap ⟲ – the last 30 seconds are saved.</p>
+<h3>📍 Markers while recording</h3>
+<p>While recording there's a <span class="key">📍 Marker</span> button below. Tap it at a good spot – the marker is saved with the riff and you can jump to it in the player.</p>
+<h3>Automatic recording (optional)</h3>
+<p>In the settings turn on “Record automatically when I start playing”. Recording starts by itself when you play (it also keeps
+a second before that so the first note isn't lost) and stops after 4 seconds of silence. Recording you start by hand doesn't stop by itself.</p>
+<div class="tip">If Riffy crashes or the phone dies while recording, the recording is recovered on the next start (the list shows “· recovered”).</div>
+
+<h2 id="tuner">4. Tuner</h2>
+<ul>
+  <li>Tap <span class="key">♪ Tuner</span>, choose a tuning (Standard, Drop D, Eb, D standard, Drop C, DADGAD, Open G)
+      and play a single string (ideally open, with a clean tone).</li>
+  <li>The tuner recognizes which string you're tuning – it shows its note (e.g. E2) and the deviation in cents with a needle.</li>
+  <li>Green = in tune, orange = close, red = far. Needle on the left (♭) – tune up, on the right (♯) – tune down.</li>
+  <li>A tuned string turns green (✓) in the row of strings, so you see which ones are done.</li>
+  <li><b>Signal</b> at the bottom shows whether the tuner hears anything at all. “Silence” means nothing comes from the input – check the label at the top and the volume on ToneX.</li>
+  <li>Concert A (440 Hz) can be shifted with the − and + buttons (e.g. 442 Hz when playing with a piano).</li>
+</ul>
+
+<h2 id="rhythm">5. Metronome and drums</h2>
+<h3>Metronome</h3>
+<ul>
+  <li>Tap <span class="key">♩ 100</span> to turn it on/off.</li>
+  <li>Long-press to set the tempo – as a number or by tapping along (at least three taps).</li>
+</ul>
+<h3>Drums</h3>
+<ul>
+  <li>Tap <span class="key">🥁 Rock</span> to start/stop the drums (instead of the metronome).</li>
+  <li>Long-press to choose the style: Rock, Metal, Reggae, Ballad, Blues shuffle, Funk, Punk, 6/8, 3/4; then the fill
+      (every 4 or 8 bars, no fills), volume and tempo. Changes are heard immediately.</li>
+  <li>Drums and metronome go to the ToneX headphones. If you want them from the phone, turn on “Metronome and drums to the phone” in the settings.</li>
+  <li>When you record with drums, the recording stays pure guitar; the style, tempo and bar start are saved with the riff.</li>
+</ul>
+<div class="tip">The drum sounds come from the Virtuosity Drums kit (Versilian Studios, free CC0 license).</div>
+
+<h2 id="looper">6. Looper</h2>
+<p>The looper records a short loop that plays over and over, and you can record more layers on top. Riffy takes care of the timing for you.</p>
+<ol>
+  <li>Tap <span class="key">🔁 Looper</span> – the panel opens.</li>
+  <li>Choose the loop length: <b>1, 2, 4 or 8 bars</b>. The tempo is the metronome tempo (long-press ♩).</li>
+  <li>Tap <span class="key">● Record loop</span>. A stick count-in plays and you see “Starts in 2… 1…”.</li>
+  <li>Play. Recording <b>stops by itself</b> exactly at the end of the last bar and the loop starts repeating right away. You don't have to hit anything.</li>
+  <li><span class="key">● Add layer</span> records another layer – it starts at the beginning of the loop and lasts exactly one cycle.</li>
+  <li><span class="key">Undo</span> removes the last layer. <span class="key">⋮</span> saves the loop as a riff or clears it.</li>
+</ol>
+<ul>
+  <li>The cursor in the panel shows where you are in the loop; the marks are bars and beats. Everything turns red while recording.</li>
+  <li>While the loop plays you can turn on the metronome or drums – they stay in time with the loop.</li>
+  <li>While the looper holds a loop, the tempo can't change (the loop wouldn't fit). Clear it first.</li>
+  <li>If the looper stops (e.g. when you play a riff), <span class="key">▶ Play loop</span> starts it again after a count-in.</li>
+</ul>
+
+<h2 id="backing">6a. Chord backing</h2>
+<p>Riffy plays bass and keys along with the drums following a chord progression – for practicing solos and improvisation.</p>
+<ol>
+  <li>Tap <span class="key">🎹 Backing</span>.</li>
+  <li>Choose the key (<span class="key">Key ▾</span>) and a ready-made progression – pop I–V–vi–IV, ballad, rock, 12-bar blues, minor progressions…</li>
+  <li>You can edit the progression: tap a chord to change or remove it, <span class="key">+</span> adds another. Chords that belong to the key are offered.</li>
+  <li>Set whether a chord lasts 1 or 2 bars and what plays: bass, keys (piano), drums (set the drum style and tempo by long-pressing 🥁 and ♩).</li>
+  <li><span class="key">▶ Play</span> – after a count-in it plays over and over. The chord being played is highlighted.</li>
+  <li><span class="key">🎼 Matching scale</span> shows the key's scale on the fretboard; <b>green notes belong to the chord being played</b> – good notes to land on.</li>
+</ol>
+<p>The backing goes to ToneX like the drums and fits the looper: you can record a rhythm part over it and play a solo.</p>
+<div class="tip">The bass uses Growlybass samples (Karoryfer Samples), the piano the Versilian Community Sample Library – both under the free CC0 license.</div>
+
+<h2 id="scale">6b. Scale on the fretboard</h2>
+<ul>
+  <li>Tap <span class="key">🎼 Scale</span> and <b>choose</b> the root note (C to B) and the scale: minor/major pentatonic, blues, natural minor, major, Dorian, Mixolydian, harmonic minor, Phrygian.</li>
+  <li>The fretboard shows the notes of the scale with their names; the root is in the accent color. The fretboard follows the tuning chosen in the tuner.</li>
+  <li><span class="key">Whole neck</span> or <span class="key">Position 1, 2…</span> – a position highlights the notes within a five-fret window.</li>
+  <li>For a riff, ⋮ → <b>Scale and key</b>: Riffy detects the key from the recording (e.g. E minor) and sets the matching scale. If it's wrong, change it above.</li>
+</ul>
+
+<h2 id="list">7. Riff list</h2>
+<ul>
+  <li>Riffs are grouped by day. Each shows its length, tempo, drum style, song, number of markers and a waveform.</li>
+  <li>Filters: <span class="key">All</span>, <span class="key">★ Favorites</span>, <span class="key">🎵 Songs</span>. 🔍 searches names, notes, keys and songs (accents don't matter).</li>
+  <li>Tap a riff to play it, ☆ adds it to favorites.</li>
+  <li><b>Long-press</b> a riff to start selecting several riffs at once – then you can favorite, send, zip, send for testing or delete them.</li>
+  <li>A deletion can still be undone for a moment with the <span class="key">Undo</span> button at the bottom.</li>
+</ul>
+<h3>The ⋮ menu of a riff</h3>
+<dl>
+  <dt>Note, tempo, key</dt><dd>Your own description of the riff.</dd>
+  <dt>🎛 Tone (ToneX)</dt><dd>Which tone or preset you used (e.g. “Marshall crunch, preset 3”). It's shown with the riff, you can search for it,
+      and new recordings get it automatically until you change it (after saving a riff the message has a <span class="key">Tone</span> button).</dd>
+  <dt>🎵 Add to a song</dt><dd>See <a href="#songs">Songs</a>.</dd>
+  <dt>🎼 Scale and key</dt><dd>Detects the riff's key and shows the matching scale on the fretboard.</dd>
+  <dt>Rename</dt><dd>If Android asks for permission to modify the file, confirm (this applies to riffs from a previous installation).</dd>
+  <dt>Detect the tempo from the playing</dt><dd>Riffy finds the hits in the recording and determines the tempo and where the bar starts. For a freely played riff it says it can't – then enter the tempo by hand.</dd>
+  <dt>Send as WAV / M4A</dt><dd>WAV is full quality, M4A a smaller file (for messages, e-mail).</dd>
+  <dt>🥁 Send with drums</dt><dd>The riff mixed with drums in its tempo and style (M4A). The original stays clean.</dd>
+  <dt>Send for testing (Drive)</dt><dd>Sends the riff to the Drive app, with an optional note of what you played.</dd>
+</dl>
+
+<h2 id="player">8. Player</h2>
+<ul>
+  <li>A small player appears at the bottom; <span class="key">⌃</span> expands it.</li>
+  <li><b>Waveform:</b> tap to jump to a spot. <b>Drag your finger</b> to mark a part that plays over and over (a loop).</li>
+  <li><b>Speed</b> slows playback down without changing the pitch (50–125 %), <b>Repeat</b> plays it again and again.</li>
+  <li>The Start [ / End ] / Whole buttons set the loop at the current playing position.</li>
+  <li><span class="key">🥁 Drums with the riff</span> plays drums in the riff's tempo and style; they follow it even when slowed down or looped.
+      If the riff has no tempo, Riffy detects it first. The first time you play with drums, the beat positions are fine-tuned to how you played.</li>
+  <li><span class="key">📍 +</span> adds a marker where it's playing. Markers are yellow on the waveform and shown below it as buttons: tap = jump, long-press = delete.</li>
+</ul>
+
+<h2 id="songs">9. Songs</h2>
+<ul>
+  <li>In a riff's ⋮ choose <b>Add to a song</b>, type a song (or pick an existing one) and a part – Intro, Verse, Chorus, Solo…</li>
+  <li>The <span class="key">🎵 Songs</span> filter groups riffs by song in their order.</li>
+  <li>Change the order in ⋮ → <b>Move up / down in the song</b>.</li>
+  <li>Tap a song name to play its parts one after another.</li>
+  <li>Remove a riff from a song in the same window with the <b>Remove</b> button.</li>
+</ul>
+
+<h2 id="sharing">10. Sharing and backup</h2>
+<ul>
+  <li>Riffs are stored on the phone in the <b>Music/Riffy</b> folder (other apps see them too). Sent M4A files are in Music/Riffy/Shared.</li>
+  <li>Notes, tempo, favorites, songs and markers are stored <b>right inside the files</b> – they survive reinstalling and copying to a computer.</li>
+  <li><b>Backup</b> (Settings): <span class="key">Back up new</span> sends riffs since the last backup to the Drive app,
+      <span class="key">Back up everything</span> sends all of them. In Drive, save them to one folder (e.g. “Riffy backup”).</li>
+</ul>
+
+<h2 id="settings">11. Settings (⚙)</h2>
+<dl>
+  <dt>Input</dt><dd>Where to record from. USB devices come first. “Find settings” tries variants for other audio interfaces,
+      “USB report” prepares a technical description of the device (to send when there are problems). The
+      <span class="key">🎸 Acoustic guitar via microphone</span> option is described in section 1a.</dd>
+  <dt>Recording</dt><dd>Trimming silence, evening out loudness, automatic recording, keeping the screen on, where the metronome and drums go.</dd>
+  <dt>Test tone to ToneX</dt><dd>Three beeps in the ToneX headphones – checks that sound from Riffy reaches ToneX.</dd>
+  <dt>Appearance and language</dt><dd>Theme (follow the phone, dark, light), accent color and language (follow the phone, Slovak, English).</dd>
+  <dt>Backup</dt><dd>See above.</dd>
+  <dt>App</dt><dd>Version, checking for updates and this guide. Riffy also checks for a new version by itself once a day.</dd>
+</dl>
+
+<h2 id="problems">12. When something doesn't work</h2>
+<dl>
+  <dt>ToneX is connected but there's silence</dt><dd>Wait a few seconds (ToneX wakes up after being plugged in). If that doesn't help, unplug it and plug it in again.
+      Still nothing? ⚙ → USB report → send the report.</dd>
+  <dt>The sound clips (red edge on the bar)</dt><dd>Tap “Gain ▾” and turn it down, or lower the output on ToneX.</dd>
+  <dt>Metronome/drums can't be heard in the ToneX headphones</dt><dd>Check that “Metronome and drums to the phone” is off and try ⚙ → Test tone to ToneX.</dd>
+  <dt>The drums don't fit the riff</dt><dd>Try ⋮ → Detect the tempo again from the playing. If the drums start the bar on the wrong beat, correct the tempo by hand.</dd>
+  <dt>Looper layers are out of time</dt><dd>Let us know whether the second layer is early or late – the offset can be fine-tuned.</dd>
+  <dt>A riff can't be renamed or deleted</dt><dd>It's a riff from a previous installation; Android asks for permission – confirm it.</dd>
+</dl>
+
+<p class="lead" style="margin-top:30px">Riffy · source code and releases: github.com/lubenoktn/Riffy-android</p>
+</body>
+</html>

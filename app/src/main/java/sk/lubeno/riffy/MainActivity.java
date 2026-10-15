@@ -99,14 +99,13 @@ import java.util.zip.ZipOutputStream;
  */
 public class MainActivity extends Activity {
     static final String FOLDER = Environment.DIRECTORY_MUSIC + "/Riffy/";
-    static final String SHARED = FOLDER + "Zdieľané/";
     static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2, ASK_RENAME = 3;
     static final Drums DRUMS = new Drums();
     static final LoopStation LOOPER = new LoopStation(DRUMS);
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
     static final Object COUNT_IN = new Object();
     static final int GREEN = 0xFF2E7D32, ORANGE = 0xFFEF6C00, GRAY = 0xFF757575, RED = 0xFFC62828, DARK = 0xFF323232;
-    static final Pattern AUTO_NAME = Pattern.compile("^(Riff|Slučka) \\d{4}-\\d{2}-\\d{2} (\\d{2})\\.(\\d{2})\\.\\d{2}( spätne| obnovené)?$");
+    static final Pattern AUTO_NAME = Pattern.compile("^(Riff|Slučka|Loop) \\d{4}-\\d{2}-\\d{2} (\\d{2})\\.(\\d{2})\\.\\d{2}( spätne| obnovené| retro| recovered)?$");
 
     final Handler ui = new Handler(Looper.getMainLooper());
     final Engine engine = Engine.get();
@@ -234,7 +233,7 @@ public class MainActivity extends Activity {
 
         public void onFailed(String text) {
             ui.post(() -> {
-                setChip(RED, "Vstup prerušený");
+                setChip(RED, getString(R.string.input_interrupted));
                 status.setText(text);
                 if (engine.recording()) finishRecording();
             });
@@ -242,21 +241,26 @@ public class MainActivity extends Activity {
 
         public void onOpened(Source c) {
             String name = c instanceof UsbAudio.Direct ? UsbAudio.name(((UsbAudio.Direct) c).dev)
-                    : c instanceof Capture && ((Capture) c).routed != null ? deviceName(((Capture) c).routed) : "Vstup";
+                    : c instanceof Capture && ((Capture) c).routed != null ? deviceName(((Capture) c).routed) : getString(R.string.input);
             ui.post(() -> setChip(GREEN, name));
         }
 
         public void onRetry() {
-            ui.post(() -> setChip(ORANGE, "Zapína sa…"));
+            ui.post(() -> setChip(ORANGE, getString(R.string.starting_up)));
         }
 
         public void onOpenFailed(String text) {
             ui.post(() -> {
-                setChip(RED, "Vstup nefunguje");
-                notice("Vstup sa nedá otvoriť.", "Podrobnosti", () -> showSettings(true));
+                setChip(RED, getString(R.string.input_broken));
+                notice(getString(R.string.input_cant_open), getString(R.string.details), () -> showSettings(true));
             });
         }
     };
+
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(Tr.wrap(base));
+    }
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -284,7 +288,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.helpButton).setOnClickListener(v -> showManual(true));
         findViewById(R.id.manualButton).setOnClickListener(v -> showManual(true));
         findViewById(R.id.manualBack).setOnClickListener(v -> showManual(false));
-        setChip(GRAY, "Vstup vypnutý");
+        setChip(GRAY, getString(R.string.input_off));
 
         // Úroveň vstupu
         gainBar.setMax(48);
@@ -315,7 +319,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.markButton).setOnClickListener(v -> {
             if (!engine.recording()) return;
             recordingMarks.add((int) (System.currentTimeMillis() - engine.recordingSince()));
-            notice("📍 Značka " + clock(System.currentTimeMillis() - engine.recordingSince()), null, null);
+            notice(getString(R.string.mark_n, clock(System.currentTimeMillis() - engine.recordingSince())), null, null);
         });
         findViewById(R.id.markAdd).setOnClickListener(v -> addMark());
         findViewById(R.id.backupNew).setOnClickListener(v -> backup(true));
@@ -392,7 +396,8 @@ public class MainActivity extends Activity {
         findViewById(R.id.toneTest).setOnClickListener(v -> toneTest());
         lookChoice(R.id.theme, Look.THEMES, "theme");
         lookChoice(R.id.accent, Look.ACCENTS, "accent");
-        ((TextView) findViewById(R.id.version)).setText("Verzia " + Updates.current(this));
+        lookChoice(R.id.lang, getResources().getStringArray(R.array.languages), "lang");
+        ((TextView) findViewById(R.id.version)).setText(getString(R.string.version_n, Updates.current(this)));
         findViewById(R.id.updates).setOnClickListener(v -> Updates.check(this, prefs, false));
         Updates.check(this, prefs, true);
         showTools();
@@ -613,7 +618,7 @@ public class MainActivity extends Activity {
             level.clear();
             live.clear();
             levelText.setText("");
-            setChip(GRAY, "Vstup vypnutý");
+            setChip(GRAY, getString(R.string.input_off));
         }
         super.onPause();
     }
@@ -687,7 +692,7 @@ public class MainActivity extends Activity {
         View page = findViewById(R.id.manualPage);
         if (show) {
             android.webkit.WebView web = findViewById(R.id.manual);
-            try (InputStream in = getAssets().open("navod.html")) {
+            try (InputStream in = getAssets().open(Tr.en ? "navod-en.html" : "navod.html")) {
                 java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
                 byte[] buf = new byte[8192];
                 int n;
@@ -696,12 +701,12 @@ public class MainActivity extends Activity {
                 boolean dark = (0.299 * ((bg >> 16) & 255) + 0.587 * ((bg >> 8) & 255) + 0.114 * (bg & 255)) < 128;
                 String accent = String.format("#%06X", Look.accent(this) & 0xFFFFFF);
                 String html = new String(b.toByteArray(), java.nio.charset.StandardCharsets.UTF_8)
-                        .replace("<html lang=\"sk\">", "<html lang=\"sk\"" + (dark ? " class=\"dark\"" : "")
+                        .replaceFirst("<html lang=\"(\\w+)\">", "<html lang=\"$1\"" + (dark ? " class=\"dark\"" : "")
                                 + " style=\"--accent:" + accent + "\">");
                 web.setBackgroundColor(bg);
                 web.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null);
             } catch (IOException e) {
-                notice("Návod sa nedá otvoriť.", null, null);
+                notice(getString(R.string.manual_cant_open), null, null);
                 return;
             }
         }
@@ -728,8 +733,7 @@ public class MainActivity extends Activity {
         banner.setVisibility(recording ? View.VISIBLE : View.GONE);
         banner.setBackgroundTintList(ColorStateList.valueOf(RED));
         if (recording) {
-            recHint.setText(autoStarted ? "Ťuknutím zastavíte a uložíte · samo sa zastaví po 4 s ticha"
-                    : "Ťuknutím zastavíte a uložíte");
+            recHint.setText(getString(autoStarted ? R.string.tap_stop_auto : R.string.tap_stop));
             recHint.setVisibility(View.VISIBLE);
         } else {
             showAutoHint();
@@ -744,7 +748,7 @@ public class MainActivity extends Activity {
         spacer.setVisibility(recording ? View.VISIBLE : View.GONE);
         if (recording) stopPlaying();
         rec.setText(recording ? "■" : "●");
-        rec.setContentDescription(recording ? "Zastaviť a uložiť" : "Nahrávať");
+        rec.setContentDescription(getString(recording ? R.string.stop_save : R.string.record));
         if (recording) startPulse();
         else stopPulse();
         inputs.setEnabled(!recording);
@@ -795,23 +799,22 @@ public class MainActivity extends Activity {
         boolean on = DRUMS.playing(Drums.CLICK);
         metroChip.setText("♩ " + bpm + (on ? "  ●" : ""));
         metroChip.setBackgroundResource(on ? R.drawable.bg_chip_on : R.drawable.bg_chip);
-        metroChip.setContentDescription("Metronóm " + bpm + " BPM, " + (on ? "zapnutý" : "vypnutý")
-                + ". Podržaním nastavíte tempo.");
+        metroChip.setContentDescription(getString(R.string.metro_desc, bpm, getString(on ? R.string.on : R.string.off)));
         int lead = leadBars();
         countChip.setBackgroundResource(lead > 0 ? R.drawable.bg_chip_on : R.drawable.bg_chip);
-        countChip.setText(lead == 0 ? "Odpočet" : lead == 1 ? "Odpočet ✓" : "Rozbeh " + lead + " ✓");
+        countChip.setText(lead == 0 ? getString(R.string.count_in) : lead == 1 ? getString(R.string.count_in_on) : getString(R.string.lead_in_on, lead));
         tunerButton.setBackgroundResource(tunerOn ? R.drawable.bg_circle_on : R.drawable.bg_circle);
         boolean drums = DRUMS.playing(Drums.DRUMS);
-        drumChip.setText("🥁 " + Drums.STYLES[prefs.getInt("drumStyle", 0)] + (drums ? "  ●" : ""));
+        drumChip.setText("🥁 " + Drums.NAMES[prefs.getInt("drumStyle", 0)] + (drums ? "  ●" : ""));
         drumChip.setBackgroundResource(drums ? R.drawable.bg_chip_on : R.drawable.bg_chip);
         boolean loop = LOOPER.hasLoop() || LOOPER.state() != LoopStation.EMPTY;
         looperChip.setText("🔁 Looper" + (loop ? "  ●" : ""));
         looperChip.setBackgroundResource(looperOn ? R.drawable.bg_chip_on : R.drawable.bg_chip);
         findViewById(R.id.scaleChip).setBackgroundResource(scaleOn ? R.drawable.bg_chip_on : R.drawable.bg_chip);
-        ((TextView) findViewById(R.id.backingChip)).setText("🎹 Sprievod" + (DRUMS.backing != null ? "  ●" : ""));
+        ((TextView) findViewById(R.id.backingChip)).setText(getString(R.string.backing_chip) + (DRUMS.backing != null ? "  ●" : ""));
         findViewById(R.id.backingChip).setBackgroundResource(backingOn ? R.drawable.bg_chip_on : R.drawable.bg_chip);
-        drumChip.setContentDescription("Bicie " + Drums.STYLES[prefs.getInt("drumStyle", 0)] + ", "
-                + (drums ? "hrajú" : "vypnuté") + ". Podržaním vyberiete štýl.");
+        drumChip.setContentDescription(getString(R.string.drums_desc, Drums.NAMES[prefs.getInt("drumStyle", 0)],
+                getString(drums ? R.string.playing : R.string.stopped)));
     }
 
     // ---- Vstupy ----
@@ -826,11 +829,11 @@ public class MainActivity extends Activity {
             case AudioDeviceInfo.TYPE_USB_DEVICE:
             case AudioDeviceInfo.TYPE_USB_HEADSET:
             case AudioDeviceInfo.TYPE_USB_ACCESSORY: return "USB";
-            case AudioDeviceInfo.TYPE_BUILTIN_MIC: return "vstavaný mikrofón";
-            case AudioDeviceInfo.TYPE_WIRED_HEADSET: return "slúchadlá s mikrofónom";
+            case AudioDeviceInfo.TYPE_BUILTIN_MIC: return Tr.s(R.string.type_mic);
+            case AudioDeviceInfo.TYPE_WIRED_HEADSET: return Tr.s(R.string.type_headset);
             case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
             case AudioDeviceInfo.TYPE_BLE_HEADSET: return "Bluetooth";
-            default: return "typ " + d.getType();
+            default: return Tr.s(R.string.type_n, d.getType());
         }
     }
 
@@ -859,8 +862,8 @@ public class MainActivity extends Activity {
         }
         devices.sort((a, b) -> Boolean.compare(isUsb(b), isUsb(a)));
         inputNames.clear();
-        for (UsbDevice d : usbDevices) inputNames.add(UsbAudio.name(d) + " – priamo cez USB");
-        for (AudioDeviceInfo d : devices) inputNames.add(deviceName(d) + (isUsb(d) ? " – cez Android" : ""));
+        for (UsbDevice d : usbDevices) inputNames.add(getString(R.string.direct_usb, UsbAudio.name(d)));
+        for (AudioDeviceInfo d : devices) inputNames.add(isUsb(d) ? getString(R.string.via_android, deviceName(d)) : deviceName(d));
         inputNames.notifyDataSetChanged();
 
         int pick = 0;
@@ -904,18 +907,17 @@ public class MainActivity extends Activity {
         channelSpin.setEnabled(!direct && !busy);
         test.setEnabled(!direct && !busy);
         if (direct) {
-            info.setText("Aplikácia číta zariadenie sama, zvukový systém Androidu obchádza. "
-                    + "Zdroj, formát a kanály sa tu nepoužijú.");
+            info.setText(R.string.info_direct);
         } else if (d == null) {
-            info.setText("Telefón nehlási žiadny vstup.");
+            info.setText(R.string.info_none);
         } else {
-            info.setText((anyUsb ? "" : "USB zariadenie Android nevidí. Skontrolujte kábel a OTG.\n")
-                    + "Kanály: " + join(d.getChannelCounts()) + "   Vzorkovanie: " + join(d.getSampleRates()) + " Hz");
+            info.setText((anyUsb ? "" : getString(R.string.info_no_usb))
+                    + getString(R.string.info_caps, join(d.getChannelCounts()), join(d.getSampleRates())));
         }
     }
 
     static String join(int[] values) {
-        if (values.length == 0) return "ľubovoľné";
+        if (values.length == 0) return Tr.s(R.string.any);
         StringBuilder s = new StringBuilder();
         for (int v : values) s.append(s.length() > 0 ? ", " : "").append(v);
         return s.toString();
@@ -932,12 +934,12 @@ public class MainActivity extends Activity {
     static final int[] SOURCE_IDS = {AUTO, MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.DEFAULT, MediaRecorder.AudioSource.VOICE_PERFORMANCE,
             MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.CAMCORDER};
-    static final String[] SOURCE_NAMES = {"automaticky", "bez úprav", "mikrofón", "predvolený", "hudobný výkon",
+    static String[] SOURCE_NAMES = {"automaticky", "bez úprav", "mikrofón", "predvolený", "hudobný výkon",
             "rozpoznávanie reči", "kamera"};
     static final int[] FORMAT_IDS = {AudioFormat.ENCODING_PCM_16BIT, AudioFormat.ENCODING_PCM_FLOAT};
     static final String[] FORMAT_NAMES = {"16 bit", "float"};
     static final int[] CHANNEL_IDS = {AUTO, 1, 2};
-    static final String[] CHANNEL_NAMES = {"auto", "mono", "stereo"};
+    static String[] CHANNEL_NAMES = {"auto", "mono", "stereo"};
 
     Spinner choice(int id, String[] names, String key) {
         Spinner s = findViewById(id);
@@ -1123,10 +1125,9 @@ public class MainActivity extends Activity {
     }
 
     static String describe(Capture c, AudioDeviceInfo dev) {
-        return (c.routed == null ? "neznámy vstup" : deviceName(c.routed))
-                + ", zdroj „" + sourceName(c.source) + "“, " + formatName(c.encoding) + ", " + c.rate + " Hz, "
-                + (c.channels == 2 ? "stereo" : "mono")
-                + (routedTo(c, dev) ? "" : "\nPozor: Android nepustil zvolený vstup.");
+        return Tr.s(R.string.describe, c.routed == null ? Tr.s(R.string.unknown_input) : deviceName(c.routed),
+                sourceName(c.source), formatName(c.encoding), c.rate, Tr.s(c.channels == 2 ? R.string.stereo : R.string.mono))
+                + (routedTo(c, dev) ? "" : Tr.s(R.string.not_routed));
     }
 
     /** Vstup podľa toho, čo je vybrané; null, ak treba počkať na povolenie pre USB. */
@@ -1134,8 +1135,8 @@ public class MainActivity extends Activity {
         UsbDevice u = selectedUsb();
         if (u != null) {
             if (!usb.hasPermission(u)) {
-                status.setText("Povoľte aplikácii prístup k USB zariadeniu.");
-                setChip(ORANGE, "Povoľte prístup k USB");
+                status.setText(R.string.allow_usb_long);
+                setChip(ORANGE, getString(R.string.allow_usb));
                 if (askedUsb.add(u.getDeviceName())) {
                     Intent answer = new Intent("sk.lubeno.riffy.USB").setPackage(getPackageName());
                     usb.requestPermission(u, PendingIntent.getBroadcast(this, 0, answer, PendingIntent.FLAG_IMMUTABLE));
@@ -1152,9 +1153,9 @@ public class MainActivity extends Activity {
         boolean acoustic = this.acoustic.isChecked();
         return attempt -> {
             Capture c = openChosen(dev, source, encoding, channels, rate, acoustic);
-            if (c == null) throw new IOException("S týmto nastavením sa vstup nedá otvoriť.");
+            if (c == null) throw new IOException(Tr.s(R.string.cant_open_setting));
             if (acoustic) c.acoustic();
-            c.where = describe(c, dev) + (acoustic ? "\nAkustická gitara: bez úprav pre hovor, filter dunenia pod 60 Hz" : "");
+            c.where = describe(c, dev) + (acoustic ? Tr.s(R.string.acoustic_info) : "");
             return c;
         };
     }
@@ -1168,20 +1169,20 @@ public class MainActivity extends Activity {
     void startMonitor() {
         if (!resumed || testing || engine.recording() || sourceSpin == null) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            setChip(GRAY, "Bez povolenia mikrofónu");
+            setChip(GRAY, getString(R.string.no_mic_permission));
             return;
         }
         long wait = waitUntil - SystemClock.uptimeMillis();
         if (wait > 0) {
-            status.setText("Čakám, kým sa zariadenie zapne…");
-            setChip(ORANGE, "Zapína sa…");
+            status.setText(R.string.waiting_device);
+            setChip(ORANGE, getString(R.string.starting_up));
             ui.removeCallbacks(delayedMonitor);
             ui.postDelayed(delayedMonitor, wait);
             return;
         }
         Source.Opener opener = opener();
         if (opener == null) return;
-        if (!engine.running()) setChip(ORANGE, "Pripája sa…");
+        if (!engine.running()) setChip(ORANGE, getString(R.string.connecting));
         engine.start(settingsKey(), opener);
     }
 
@@ -1191,14 +1192,14 @@ public class MainActivity extends Activity {
 
     void showGain() {
         int db = gainBar.getProgress() - 24;
-        gainText.setText("Zosilnenie " + (db > 0 ? "+" : "") + db + " dB ▾");
+        gainText.setText(getString(R.string.gain, (db > 0 ? "+" : "") + db));
     }
 
     void showLevel(int[] peak) {
         int max = 0;
         for (int p : peak) max = Math.max(max, p);
         int top = max;
-        String text = Source.levels(peak) + (max >= 32700 ? "   ⚠ prebudené, uberte" : "");
+        String text = Source.levels(peak) + (max >= 32700 ? getString(R.string.clipping) : "");
         ui.post(() -> {
             level.set(top);
             live.push(top, engine.recording());
@@ -1231,7 +1232,7 @@ public class MainActivity extends Activity {
 
     void setBpm(int value) {
         if (LOOPER.hasLoop() && value != bpm) {
-            notice("Tempo sa nedá zmeniť, kým je v looperi slučka.", "Vymazať", () -> {
+            notice(getString(R.string.tempo_locked), getString(R.string.clear), () -> {
                 LOOPER.clear();
                 setBpm(value);
             });
@@ -1254,7 +1255,7 @@ public class MainActivity extends Activity {
         picker.setValue(bpm);
         picker.setWrapSelectorWheel(false);
         Button tap = new Button(this);
-        tap.setText("Ťukajte do rytmu");
+        tap.setText(R.string.tap_tempo);
         tap.setAllCaps(false);
         taps.clear();
         tap.setOnClickListener(v -> {
@@ -1270,10 +1271,10 @@ public class MainActivity extends Activity {
         box.addView(picker);
         box.addView(tap);
         new AlertDialog.Builder(this)
-                .setTitle("Tempo (BPM)")
+                .setTitle(R.string.tempo_bpm)
                 .setView(box)
-                .setPositiveButton("Hotovo", (d, w) -> setBpm(picker.getValue()))
-                .setNegativeButton("Zrušiť", null)
+                .setPositiveButton(R.string.done, (d, w) -> setBpm(picker.getValue()))
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -1285,10 +1286,10 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(Math.round(20 * d), Math.round(8 * d), Math.round(20 * d), 0);
         android.widget.RadioGroup styles = new android.widget.RadioGroup(this);
-        for (int i = 0; i < Drums.STYLES.length; i++) {
+        for (int i = 0; i < Drums.NAMES.length; i++) {
             android.widget.RadioButton b = new android.widget.RadioButton(this);
             b.setId(View.generateViewId());
-            b.setText(Drums.STYLES[i]);
+            b.setText(Drums.NAMES[i]);
             b.setMinHeight(Math.round(44 * d));
             int style = i;
             b.setOnCheckedChangeListener((x, on) -> {
@@ -1302,7 +1303,7 @@ public class MainActivity extends Activity {
         }
         box.addView(styles);
         TextView fillLabel = new TextView(this);
-        fillLabel.setText("Prechod");
+        fillLabel.setText(R.string.fill);
         fillLabel.setPadding(0, Math.round(12 * d), 0, 0);
         box.addView(fillLabel);
         Spinner fills = new Spinner(this);
@@ -1321,7 +1322,7 @@ public class MainActivity extends Activity {
         });
         box.addView(fills);
         TextView volLabel = new TextView(this);
-        volLabel.setText("Hlasitosť");
+        volLabel.setText(R.string.volume);
         volLabel.setPadding(0, Math.round(12 * d), 0, 0);
         box.addView(volLabel);
         SeekBar vol = new SeekBar(this);
@@ -1343,11 +1344,11 @@ public class MainActivity extends Activity {
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.addView(box);
         new AlertDialog.Builder(this)
-                .setTitle("Bicie")
+                .setTitle(R.string.drums)
                 .setView(scroll)
-                .setPositiveButton("Hotovo", null)
-                .setNeutralButton("Tempo " + bpm, (x, w) -> tempoDialog())
-                .setNegativeButton(DRUMS.playing(Drums.DRUMS) ? "Zastaviť" : "Hrať", (x, w) -> {
+                .setPositiveButton(R.string.done, null)
+                .setNeutralButton(getString(R.string.tempo_n, bpm), (x, w) -> tempoDialog())
+                .setNegativeButton(DRUMS.playing(Drums.DRUMS) ? R.string.stop : R.string.play, (x, w) -> {
                     if (DRUMS.playing(Drums.DRUMS)) rhythmOff();
                     else rhythm(Drums.DRUMS);
                     showTools();
@@ -1369,9 +1370,9 @@ public class MainActivity extends Activity {
         UsbAudio.Direct d = UsbAudio.Direct.current;
         if (d == null) {
             new AlertDialog.Builder(this)
-                    .setTitle("Skúšobný tón")
-                    .setMessage("ToneX práve nie je pripojený cez vlastný ovládač (USB). Zapojte ho a skúste znova.")
-                    .setPositiveButton("Zavrieť", null)
+                    .setTitle(R.string.tone_test)
+                    .setMessage(R.string.tone_not_connected)
+                    .setPositiveButton(R.string.close, null)
                     .show();
             return;
         }
@@ -1391,14 +1392,13 @@ public class MainActivity extends Activity {
             String state = d.outputState();
             ui.post(() -> {
                 findViewById(R.id.toneTest).setEnabled(true);
-                status.setText("Výstup do USB: " + state);
+                status.setText(getString(R.string.usb_output, state));
                 new AlertDialog.Builder(this)
-                        .setTitle("Skúšobný tón")
-                        .setMessage((d.hasOutput() ? "Zazneli v slúchadlách ToneX tri pípnutia?\n\n"
-                                : "Do ToneX sa zvuk poslať nepodarilo.\n\n") + "Výstup: " + state
-                                + "\n\nAk nič nepočuť, pošlite Popis USB.")
-                        .setPositiveButton("Zavrieť", null)
-                        .setNeutralButton("Popis USB", (x, w) -> usbReport())
+                        .setTitle(R.string.tone_test)
+                        .setMessage(getString(d.hasOutput() ? R.string.tone_heard : R.string.tone_failed)
+                                + getString(R.string.tone_output, state))
+                        .setPositiveButton(R.string.close, null)
+                        .setNeutralButton(R.string.usb_report, (x, w) -> usbReport())
                         .show();
             });
         }, "ton").start();
@@ -1436,15 +1436,14 @@ public class MainActivity extends Activity {
         stopPlaying();
         if (!engine.running()) {
             startMonitor();
-            notice("Vstup sa ešte spúšťa, skúste o chvíľu.", null, null);
+            notice(getString(R.string.input_starting), null, null);
             return;
         }
         boolean sounds = DRUMS.running() && !DRUMS.following()
                 && (DRUMS.mode != Drums.OFF || DRUMS.backing != null || LOOPER.hasLoop());
         if (sounds && !warnedBleed && speakerBleed()) {
             warnedBleed = true;
-            notice("Bicie hrajú z reproduktora a mikrofón ich nahrá tiež. Na nahrávanie s bicími použite "
-                    + "slúchadlá do kábla.", "Rozumiem", null);
+            notice(getString(R.string.bleed_warning), getString(R.string.got_it), null);
         }
         if (leadBars() > 0) startCountIn();
         else beginRecording(false);
@@ -1509,8 +1508,7 @@ public class MainActivity extends Activity {
             int left = -k, b = (k + beats) / bar + 1;
             boolean last = left <= bar;
             rec.setText(last ? String.valueOf(left) : "♪");
-            banner.setText((last ? "Odpočet " + left : "Rozbeh – takt " + b + " z " + (lead - 1))
-                    + "   (ťuknutím zrušíte)");
+            banner.setText(last ? getString(R.string.count_n, left) : getString(R.string.lead_bar, b, lead - 1));
         }
         ui.postAtTime(() -> countTick(lead, bar, beats, wasOn, k, deadline), COUNT_IN, SystemClock.uptimeMillis() + 10);
     }
@@ -1539,7 +1537,7 @@ public class MainActivity extends Activity {
             status.setText(e.getMessage());
             banner.setVisibility(View.GONE);
             rec.setText("●");
-            notice("Nahrávanie sa nedá spustiť.", "Podrobnosti", () -> showSettings(true));
+            notice(getString(R.string.cant_start_rec), getString(R.string.details), () -> showSettings(true));
             return;
         }
         boolean drums = DRUMS.playing(Drums.DRUMS);
@@ -1554,7 +1552,7 @@ public class MainActivity extends Activity {
 
     void tick() {
         if (!engine.recording()) return;
-        banner.setText("●  Nahrávam");
+        banner.setText(R.string.recording_banner);
         recClock.setText(clock(System.currentTimeMillis() - engine.recordingSince()));
         ui.postDelayed(this::tick, 250);
     }
@@ -1579,8 +1577,8 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 String msg = e.getMessage();
                 ui.post(() -> {
-                    status.setText("Chyba pri ukladaní: " + msg);
-                    notice("Nahrávku sa nepodarilo uložiť.", "Podrobnosti", () -> showSettings(true));
+                    status.setText(getString(R.string.save_error, msg));
+                    notice(getString(R.string.save_failed), getString(R.string.details), () -> showSettings(true));
                 });
             } finally {
                 if (r != null) r.file.delete();
@@ -1598,7 +1596,7 @@ public class MainActivity extends Activity {
     /** Spätné nahrávanie: uloží, čo vstup práve počul. */
     void saveRetro() {
         if (!engine.running()) {
-            notice("Vstup nebeží.", null, null);
+            notice(getString(R.string.input_not_running), null, null);
             return;
         }
         retro.setEnabled(false);
@@ -1613,16 +1611,16 @@ public class MainActivity extends Activity {
             try {
                 Engine.Recorded r = engine.saveHistory(temp, Engine.HISTORY_SECONDS);
                 if (r == null) {
-                    ui.post(() -> notice("Ešte nie je čo uložiť.", null, null));
+                    ui.post(() -> notice(getString(R.string.nothing_to_save), null, null));
                 } else {
-                    String saved = save(temp, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)) + " spätne", tempo, groove);
+                    String saved = save(temp, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)) + getString(R.string.suffix_retro), tempo, groove);
                     ui.post(() -> savedNotice(saved));
                 }
             } catch (Exception e) {
                 String msg = e.getMessage();
                 ui.post(() -> {
-                    status.setText("Chyba pri ukladaní: " + msg);
-                    notice("Nahrávku sa nepodarilo uložiť.", "Podrobnosti", () -> showSettings(true));
+                    status.setText(getString(R.string.save_error, msg));
+                    notice(getString(R.string.save_failed), getString(R.string.details), () -> showSettings(true));
                 });
             } finally {
                 temp.delete();
@@ -1691,7 +1689,7 @@ public class MainActivity extends Activity {
         v.put(MediaStore.Audio.Media.RELATIVE_PATH, FOLDER);
         v.put(MediaStore.Audio.Media.IS_PENDING, 1);
         Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
-        if (uri == null) throw new IOException("Nahrávku sa nepodarilo uložiť.");
+        if (uri == null) throw new IOException(getString(R.string.save_failed));
         try (OutputStream out = cr.openOutputStream(uri)) {
             // Jemný nábeh 10 ms a dozvuk 50 ms, aby na začiatku a konci nelúplo.
             Wav.copyProcessed(temp, range[0], range[1], gain, format.rate / 100, format.rate / 20, out);
@@ -1734,16 +1732,16 @@ public class MainActivity extends Activity {
             askedUsb.remove(u.getDeviceName());
             Intent answer = new Intent("sk.lubeno.riffy.USB").setPackage(getPackageName());
             usb.requestPermission(u, PendingIntent.getBroadcast(this, 0, answer, PendingIntent.FLAG_IMMUTABLE));
-            notice("Povoľte prístup a ťuknite znova.", null, null);
+            notice(getString(R.string.allow_tap_again), null, null);
             return;
         }
         testing = true;
         engine.stop();
         usbInfo.setEnabled(false);
-        status.setText("Hrajte na gitare, asi 5 sekúnd skúšam čítať z USB…");
+        status.setText(R.string.reading_usb);
         new Thread(() -> {
-            String text = "Telefón: " + Build.MANUFACTURER + " " + Build.MODEL + ", Android " + Build.VERSION.RELEASE
-                    + "\n" + UsbAudio.selfTest(usb, u) + UsbAudio.report(usb, u);
+            String text = getString(R.string.phone_line, Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE)
+                    + UsbAudio.selfTest(usb, u) + UsbAudio.report(usb, u);
             ui.post(() -> {
                 testing = false;
                 usbInfo.setEnabled(true);
@@ -1756,16 +1754,16 @@ public class MainActivity extends Activity {
 
     void showReport(String text) {
         new AlertDialog.Builder(this)
-                .setTitle("Popis USB zariadenia")
+                .setTitle(R.string.usb_report_title)
                 .setMessage(text)
-                .setPositiveButton("Poslať", (d, w) -> {
+                .setPositiveButton(R.string.send, (d, w) -> {
                     Intent send = new Intent(Intent.ACTION_SEND);
                     send.setType("text/plain");
-                    send.putExtra(Intent.EXTRA_SUBJECT, "Riffy – popis USB zariadenia");
+                    send.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.usb_report_subject));
                     send.putExtra(Intent.EXTRA_TEXT, text);
-                    startActivity(Intent.createChooser(send, "Poslať popis"));
+                    startActivity(Intent.createChooser(send, getString(R.string.send_report)));
                 })
-                .setNegativeButton("Zavrieť", null)
+                .setNegativeButton(R.string.close, null)
                 .show();
     }
 
@@ -1784,9 +1782,9 @@ public class MainActivity extends Activity {
         }
 
         String line() {
-            String how = sourceName(source) + ", " + formatName(encoding) + ", " + (channels == 2 ? "stereo" : "mono");
-            if (!opened) return "nespustilo sa — " + how;
-            return Source.levels(peak) + " — " + how + (routed ? "" : " (nahrávalo z: " + device + ")");
+            String how = sourceName(source) + ", " + formatName(encoding) + ", " + Tr.s(channels == 2 ? R.string.stereo : R.string.mono);
+            if (!opened) return Tr.s(R.string.test_not_started, how);
+            return Source.levels(peak) + " — " + how + (routed ? "" : Tr.s(R.string.test_recorded_from, device));
         }
     }
 
@@ -1796,11 +1794,10 @@ public class MainActivity extends Activity {
             return;
         }
         new AlertDialog.Builder(this)
-                .setTitle("Skúška vstupu")
-                .setMessage("Aplikácia vyskúša všetky nastavenia, každé asi na sekundu a pol. "
-                        + "Celý čas, asi 45 sekúnd, hrajte na gitare (napríklad držte akord a opakovane brnkajte).")
-                .setPositiveButton("Začať", (d, w) -> runTest())
-                .setNegativeButton("Zrušiť", null)
+                .setTitle(R.string.input_test)
+                .setMessage(R.string.input_test_msg)
+                .setPositiveButton(R.string.start, (d, w) -> runTest())
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -1810,7 +1807,7 @@ public class MainActivity extends Activity {
         AudioDeviceInfo dev = selected();
         int rate = rateFor(dev);
         testing = true;
-        test.setText("Zastaviť skúšku");
+        test.setText(R.string.stop_test);
         test.setOnClickListener(v -> testing = false);
         new Thread(() -> {
             List<Result> results = new ArrayList<>();
@@ -1822,14 +1819,14 @@ public class MainActivity extends Activity {
                         r.source = SOURCE_IDS[s];
                         r.encoding = FORMAT_IDS[e];
                         r.channels = ch;
-                        String step = "Skúšam " + (++done) + " z " + total + ": " + sourceName(r.source) + ", "
-                                + formatName(r.encoding) + ", " + (ch == 2 ? "stereo" : "mono");
+                        String step = getString(R.string.testing_n, ++done, total, sourceName(r.source) + ", "
+                                + formatName(r.encoding) + ", " + getString(ch == 2 ? R.string.stereo : R.string.mono));
                         ui.post(() -> status.setText(step));
                         Capture c = open(dev, r.source, r.encoding, ch, rate);
                         if (c != null) {
                             r.opened = true;
                             r.routed = routedTo(c, dev);
-                            r.device = c.routed == null ? "neznámy vstup" : deviceName(c.routed);
+                            r.device = c.routed == null ? getString(R.string.unknown_input) : deviceName(c.routed);
                             r.peak = new int[ch];
                             int[] buf = new int[rate / 20 * ch];
                             long begin = System.currentTimeMillis();
@@ -1847,7 +1844,7 @@ public class MainActivity extends Activity {
             }
             ui.post(() -> {
                 testing = false;
-                test.setText("Nájsť nastavenie");
+                test.setText(R.string.find_setup);
                 test.setOnClickListener(v -> findSetup());
                 status.setText("");
                 startMonitor();
@@ -1860,29 +1857,29 @@ public class MainActivity extends Activity {
         results.sort((a, b) -> Integer.compare(
                 b.routed ? b.max() : -2, a.routed ? a.max() : -2));
         StringBuilder text = new StringBuilder();
-        text.append("Vstup: ").append(dev == null ? "neznámy" : deviceName(dev)).append("\n\n");
+        text.append(getString(R.string.input_line, dev == null ? getString(R.string.unknown) : deviceName(dev)));
         for (Result r : results) text.append(r.line()).append("\n");
         Result best = results.isEmpty() ? null : results.get(0);
         // Pod -60 dB je to len šum, nie gitara.
         boolean works = best != null && best.routed && best.max() > 32;
-        String head = works ? "Najlepšie funguje: " + sourceName(best.source) + ", " + formatName(best.encoding) + ", "
-                + (best.channels == 2 ? "stereo" : "mono") + ".\n\n"
-                : "Zo žiadneho nastavenia neprišiel zo zvoleného vstupu použiteľný zvuk (hlasnejší než -60 dB).\n\n";
+        String head = works ? getString(R.string.best_works, sourceName(best.source) + ", " + formatName(best.encoding) + ", "
+                + getString(best.channels == 2 ? R.string.stereo : R.string.mono))
+                : getString(R.string.nothing_works);
 
         AlertDialog.Builder dialog = new AlertDialog.Builder(this)
-                .setTitle("Výsledok skúšky")
+                .setTitle(R.string.test_result)
                 .setMessage(head + text)
-                .setNeutralButton("Poslať výsledok", (d, w) -> {
+                .setNeutralButton(R.string.send_result, (d, w) -> {
                     Intent send = new Intent(Intent.ACTION_SEND);
                     send.setType("text/plain");
-                    send.putExtra(Intent.EXTRA_SUBJECT, "Riffy – výsledok skúšky vstupu");
-                    send.putExtra(Intent.EXTRA_TEXT, "Telefón: " + Build.MANUFACTURER + " " + Build.MODEL
-                            + ", Android " + Build.VERSION.RELEASE + "\n" + head + text);
-                    startActivity(Intent.createChooser(send, "Poslať výsledok"));
+                    send.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.test_subject));
+                    send.putExtra(Intent.EXTRA_TEXT, getString(R.string.phone_line, Build.MANUFACTURER, Build.MODEL,
+                            Build.VERSION.RELEASE) + head + text);
+                    startActivity(Intent.createChooser(send, getString(R.string.send_result)));
                 })
-                .setNegativeButton("Zavrieť", null);
+                .setNegativeButton(R.string.close, null);
         if (works) {
-            dialog.setPositiveButton("Použiť", (d, w) -> {
+            dialog.setPositiveButton(R.string.use, (d, w) -> {
                 sourceSpin.setSelection(indexOf(SOURCE_IDS, best.source));
                 formatSpin.setSelection(indexOf(FORMAT_IDS, best.encoding));
                 channelSpin.setSelection(indexOf(CHANNEL_IDS, best.channels));
@@ -2001,10 +1998,10 @@ public class MainActivity extends Activity {
         }
         adapter.notifyDataSetChanged();
         boolean none = rows.isEmpty();
-        empty.setText(riffs.isEmpty() ? "Zatiaľ tu nie sú žiadne riffy.\nNahrajte prvý veľkým červeným tlačidlom."
-                : filter == FAVORITES && q.isEmpty() ? "Žiadne obľúbené riffy.\nHviezdičkou pri riffe ho pridáte."
-                : filter == SONGS && q.isEmpty() ? "Žiadne piesne.\nRiff zaradíte do piesne cez ⋮ → Pieseň."
-                : "Nič sa nenašlo.");
+        empty.setText(riffs.isEmpty() ? R.string.empty_none
+                : filter == FAVORITES && q.isEmpty() ? R.string.empty_fav
+                : filter == SONGS && q.isEmpty() ? R.string.empty_songs
+                : R.string.empty_search);
         empty.setVisibility(none ? View.VISIBLE : View.GONE);
         list.setVisibility(none ? View.GONE : View.VISIBLE);
     }
@@ -2016,9 +2013,9 @@ public class MainActivity extends Activity {
         int t = today.get(Calendar.YEAR) * 400 + today.get(Calendar.DAY_OF_YEAR);
         today.add(Calendar.DAY_OF_YEAR, -1);
         int y = today.get(Calendar.YEAR) * 400 + today.get(Calendar.DAY_OF_YEAR);
-        if (d == t) return "Dnes";
-        if (d == y) return "Včera";
-        return DateFormat.format("d. M. yyyy", new Date(ms)).toString();
+        if (d == t) return Tr.s(R.string.today);
+        if (d == y) return Tr.s(R.string.yesterday);
+        return DateFormat.format(Tr.s(R.string.date_format), new Date(ms)).toString();
     }
 
     /** Automatické meno „Riff 2026-10-15 09.12.30“ sa ukáže ako „Riff 9:12“; dátum je v nadpise dňa. */
@@ -2075,7 +2072,7 @@ public class MainActivity extends Activity {
                     ? r.info.part + "  ·  " + label(r.name) : label(r.name));
             StringBuilder line = new StringBuilder(clock(r.duration));
             if (r.info.bpm > 0) line.append(" · ").append(r.info.bpm).append(" BPM");
-            if (!r.info.drums.isEmpty()) line.append(" · 🥁 ").append(r.info.drums);
+            if (!r.info.drums.isEmpty()) line.append(" · 🥁 ").append(Drums.display(r.info.drums));
             if (!r.info.tone.isEmpty()) line.append(" · 🎛 ").append(r.info.tone);
             if (!r.info.song.isEmpty() && filter != SONGS) line.append(" · 🎵 ").append(r.info.song)
                     .append(r.info.part.isEmpty() ? "" : " – " + r.info.part);
@@ -2106,7 +2103,7 @@ public class MainActivity extends Activity {
     byte[] wave(Riff r) {
         return Waves.get(getCacheDir(), r.id + "_" + r.duration, () -> {
             android.os.ParcelFileDescriptor fd = getContentResolver().openFileDescriptor(r.uri(), "r");
-            if (fd == null) throw new IOException("Súbor sa nedá otvoriť.");
+            if (fd == null) throw new IOException(getString(R.string.file_cant_open));
             return new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd);
         }, () -> ui.post(() -> {
             if (adapter != null) adapter.notifyDataSetChanged();
@@ -2211,7 +2208,7 @@ public class MainActivity extends Activity {
     void expandPlayer(boolean expand) {
         playerMore.setVisibility(expand ? View.VISIBLE : View.GONE);
         playerExpand.setText(expand ? "⌄" : "⌃");
-        playerExpand.setContentDescription(expand ? "Zbaliť prehrávač" : "Rozbaliť prehrávač");
+        playerExpand.setContentDescription(getString(expand ? R.string.collapse_player : R.string.expand_player));
     }
 
     void showPlayerInfo() {
@@ -2261,15 +2258,15 @@ public class MainActivity extends Activity {
             playerWave.setPeaks(wave(r));
             playerPanel.setVisibility(View.VISIBLE);
             playingRiff = r;
-            playDrums.setText(r.info.bpm > 0 ? "🥁 Bicie k riffu (" + drumStyleOf(r) + ", " + r.info.bpm + " BPM)"
-                    : "🥁 Bicie k riffu (tempo zistím z hrania)");
+            playDrums.setText(r.info.bpm > 0 ? getString(R.string.drums_with, drumStyleOf(r), r.info.bpm)
+                    : getString(R.string.drums_detect));
             showMarks();
             showLoop();
             showPlayerInfo();
             resume();
         } catch (Exception e) {
             stopPlaying();
-            notice("Nahrávka sa nedá prehrať.", null, null);
+            notice(getString(R.string.cant_play), null, null);
         }
         adapter.notifyDataSetChanged();
     }
@@ -2341,9 +2338,9 @@ public class MainActivity extends Activity {
         int dur = player == null ? 0 : player.getDuration();
         playerWave.setLoop(dur <= 0 || loopStart < 0 ? -1 : loopStart / (float) dur,
                 dur <= 0 || loopEnd < 0 ? -1 : loopEnd / (float) dur);
-        loopText.setText(loopStart < 0 && loopEnd < 0 ? "Slučka: celá nahrávka · potiahnutím po vlnke vyznačíte časť"
-                : "Slučka: " + time(Math.max(0, loopStart), 1) + " – "
-                + (loopEnd < 0 ? "koniec" : time(loopEnd, 1)));
+        loopText.setText(loopStart < 0 && loopEnd < 0 ? getString(R.string.loop_whole)
+                : getString(R.string.loop_range, time(Math.max(0, loopStart), 1),
+                loopEnd < 0 ? getString(R.string.end) : time(loopEnd, 1)));
     }
 
     /** Čas m:ss, s desatinami sekundy pre slučku. */
@@ -2394,9 +2391,14 @@ public class MainActivity extends Activity {
 
     Riff playingRiff;
 
-    String drumStyleOf(Riff r) {
+    /** Štýl bicích riffu, ako je uložený (slovenský názov); inak zvolený štýl. */
+    String drumStyleKey(Riff r) {
         for (String s : Drums.STYLES) if (s.equals(r.info.drums)) return s;
-        return Drums.STYLES[prefs.getInt("drumStyle", 0)];
+        return Drums.STYLES[Math.max(0, Math.min(prefs.getInt("drumStyle", 0), Drums.STYLES.length - 1))];
+    }
+
+    String drumStyleOf(Riff r) {
+        return Drums.display(drumStyleKey(r));
     }
 
     /** Poloha prehrávača pre bicie (MediaPlayer sa číta len tu, na hlavnom vlákne). */
@@ -2418,7 +2420,7 @@ public class MainActivity extends Activity {
             playDrums.setChecked(false);
             detectTempo(r, () -> {
                 if (playingRiff == r) {
-                    playDrums.setText("🥁 Bicie k riffu (" + drumStyleOf(r) + ", " + r.info.bpm + " BPM)");
+                    playDrums.setText(getString(R.string.drums_with, drumStyleOf(r), r.info.bpm));
                     playDrums.setChecked(true);
                 }
             });
@@ -2431,7 +2433,7 @@ public class MainActivity extends Activity {
         }
         if (DRUMS.following()) return;
         DRUMS.bpm = r.info.bpm;
-        DRUMS.style = Math.max(0, Drums.styleIndex(drumStyleOf(r)));
+        DRUMS.style = Math.max(0, Drums.styleIndex(drumStyleKey(r)));
         tickClock();
         DRUMS.follow(this, new Output.Track(playbackDevice()), playerClock, Math.max(0, r.info.beat0));
         showTools();
@@ -2456,7 +2458,7 @@ public class MainActivity extends Activity {
                     x = Beat.mono(in, 0, rate * 60L);
                 }
                 int shift = Beat.shiftMs(Beat.onsets(x, rate), base, bpm0);
-                int bar = Math.round(60000f * Drums.PATTERNS[Math.max(0, Drums.styleIndex(drumStyleOf(r)))].beats / bpm0);
+                int bar = Math.round(60000f * Drums.PATTERNS[Math.max(0, Drums.styleIndex(drumStyleKey(r)))].beats / bpm0);
                 int fixed = Math.floorMod(base + shift, bar);
                 ui.post(() -> {
                     r.info.beat0 = fixed;
@@ -2521,7 +2523,7 @@ public class MainActivity extends Activity {
 
     void showAutoHint() {
         if (engine.recording() || counting) return;
-        recHint.setText(autoOn ? "Automatické nahrávanie: začne sa, keď začnete hrať." : "Ťuknutím zastavíte a uložíte");
+        recHint.setText(autoOn ? R.string.auto_hint : R.string.tap_stop);
         recHint.setVisibility(autoOn ? View.VISIBLE : View.GONE);
     }
 
@@ -2539,7 +2541,7 @@ public class MainActivity extends Activity {
             lp.rightMargin = Math.round(8 * d);
             chipB.setOnClickListener(v -> {
                 if (LOOPER.hasLoop() || LOOPER.state() != LoopStation.EMPTY) {
-                    notice("Dĺžku zmeníte, keď slučku vymažete.", null, null);
+                    notice(getString(R.string.loop_len_locked), null, null);
                     return;
                 }
                 LOOPER.bars = b;
@@ -2554,8 +2556,8 @@ public class MainActivity extends Activity {
             showLooper();
         });
         findViewById(R.id.looperMore).setOnClickListener(v -> new AlertDialog.Builder(this)
-                .setTitle("Slučka")
-                .setItems(new String[]{"Uložiť ako riff", "Vymazať slučku"}, (x, which) -> {
+                .setTitle(R.string.loop)
+                .setItems(new String[]{getString(R.string.save_as_riff), getString(R.string.clear_loop)}, (x, which) -> {
                     if (which == 0) saveLoop();
                     else {
                         LOOPER.clear();
@@ -2586,11 +2588,11 @@ public class MainActivity extends Activity {
             return;
         }
         if (!engine.running()) {
-            notice("Vstup nebeží.", null, null);
+            notice(getString(R.string.input_not_running), null, null);
             return;
         }
         if (engine.recording()) {
-            notice("Najprv dokončite nahrávanie.", null, null);
+            notice(getString(R.string.finish_recording_first), null, null);
             return;
         }
         stopPlaying();
@@ -2609,7 +2611,7 @@ public class MainActivity extends Activity {
         // Prehrávač potrebuje chvíľu, kým zaznie prvý zvuk.
         ui.postDelayed(() -> {
             boolean ok = LOOPER.hasLoop() ? LOOPER.recordLayer() : LOOPER.recordFirst();
-            if (!ok) notice("Looper sa nedá spustiť, skúste znova.", null, null);
+            if (!ok) notice(getString(R.string.looper_cant_start), null, null);
             showLooper();
             showTools();
         }, free ? 0 : 150);
@@ -2619,37 +2621,34 @@ public class MainActivity extends Activity {
         int st = LOOPER.state();
         boolean live = DRUMS.running() && !DRUMS.following();
         boolean has = LOOPER.hasLoop();
-        String bars = LOOPER.bars + (LOOPER.bars == 1 ? " takt" : LOOPER.bars < 5 ? " takty" : " taktov");
+        String bars = getResources().getQuantityString(R.plurals.bars, LOOPER.bars, LOOPER.bars);
         switch (st) {
             case LoopStation.COUNTING:
-                looperMain.setText("Zrušiť");
-                looperText.setText("Pripravte sa: po odpočte sa nahrá presne " + bars + ". Nemusíte nič stláčať.");
+                looperMain.setText(R.string.cancel);
+                looperText.setText(getString(R.string.loop_get_ready, bars));
                 break;
             case LoopStation.RECORDING:
-                looperMain.setText("Zrušiť");
-                looperText.setText("Hrajte. Nahrávanie skončí samo na konci " + (LOOPER.bars == 1 ? "taktu" : "posledného taktu")
-                        + " a slučka začne hrať dookola.");
+                looperMain.setText(R.string.cancel);
+                looperText.setText(LOOPER.bars == 1 ? R.string.loop_play_one : R.string.loop_play_more);
                 break;
             case LoopStation.ARMED:
-                looperMain.setText("Zrušiť");
-                looperText.setText("Ďalšia vrstva sa začne nahrávať od začiatku slučky, presne na jedno kolo.");
+                looperMain.setText(R.string.cancel);
+                looperText.setText(R.string.loop_armed);
                 break;
             case LoopStation.OVERDUB:
-                looperMain.setText("Zrušiť");
-                looperText.setText("Nahrávam vrstvu, skončí sa sama na konci kola.");
+                looperMain.setText(R.string.cancel);
+                looperText.setText(R.string.loop_overdub);
                 break;
             default:
                 if (!has) {
-                    looperMain.setText("● Nahrať slučku");
-                    looperText.setText("Zvoľte dĺžku slučky. Po ťuknutí zaznie odpočet a nahrá sa presne " + bars
-                            + " v tempe " + bpm + ". Metronóm alebo bicie si môžete zapnúť aj počas hrania.");
+                    looperMain.setText(R.string.loop_record);
+                    looperText.setText(getString(R.string.loop_intro, bars, bpm));
                 } else if (!live) {
-                    looperMain.setText("▶ Pustiť slučku");
-                    looperText.setText("Slučka je pripravená. Po odpočte bude hrať dookola.");
+                    looperMain.setText(R.string.loop_play);
+                    looperText.setText(R.string.loop_ready);
                 } else {
-                    looperMain.setText("● Pridať vrstvu");
-                    looperText.setText("Slučka hrá dookola. Ďalšia vrstva sa nahrá presne na jedno kolo od jej začiatku. "
-                            + "Späť odoberie poslednú vrstvu; ⋮ ju uloží ako riff.");
+                    looperMain.setText(R.string.loop_add);
+                    looperText.setText(R.string.loop_playing);
                 }
         }
         looperUndo.setEnabled(has && st == LoopStation.PLAYING && LOOPER.layers() > 0);
@@ -2679,7 +2678,7 @@ public class MainActivity extends Activity {
     void saveLoop() {
         float[] m = LOOPER.mixdown();
         if (m == null) {
-            notice("Slučka je prázdna.", null, null);
+            notice(getString(R.string.loop_empty), null, null);
             return;
         }
         int tempo = bpm, beats = DRUMS.beatsPerBar();
@@ -2700,11 +2699,11 @@ public class MainActivity extends Activity {
                     w.write(buf, 0, n * 2);
                 }
                 w.finish(LoopStation.RATE);
-                String saved = save(temp, "Slučka " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)), tempo,
+                String saved = save(temp, getString(R.string.loop_name) + " " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)), tempo,
                         new Groove(style, 0, false, beats));
                 ui.post(() -> savedNotice(saved));
             } catch (Exception e) {
-                ui.post(() -> notice("Slučku sa nepodarilo uložiť.", null, null));
+                ui.post(() -> notice(getString(R.string.loop_save_failed), null, null));
             } finally {
                 temp.delete();
                 ui.post(this::loadRiffs);
@@ -2761,7 +2760,7 @@ public class MainActivity extends Activity {
         roots.removeAllViews();
         for (int i = 0; i < 12; i++) {
             int pc = i;
-            roots.addView(chip(Scales.ROOTS[i], i == root, () -> setScale(pc, prefs.getInt("scaleType", 0))));
+            roots.addView(chip(Scales.name(i), i == root, () -> setScale(pc, prefs.getInt("scaleType", 0))));
         }
         LinearLayout types = findViewById(R.id.scaleTypes);
         types.removeAllViews();
@@ -2773,21 +2772,26 @@ public class MainActivity extends Activity {
         if (scalePos >= pos.size()) scalePos = -1;
         LinearLayout row = findViewById(R.id.scalePositions);
         row.removeAllViews();
-        row.addView(chip("Celý hmatník", scalePos < 0, () -> {
+        row.addView(chip(getString(R.string.whole_neck), scalePos < 0, () -> {
             scalePos = -1;
             showScale();
         }));
         for (int k = 0; k < pos.size(); k++) {
             int index = k;
-            row.addView(chip("Poloha " + (k + 1), k == scalePos, () -> {
+            row.addView(chip(getString(R.string.position_n, k + 1), k == scalePos, () -> {
                 scalePos = index;
                 showScale();
             }));
         }
         ((ScaleView) findViewById(R.id.scaleView)).set(strings, root, Scales.notes(root, type),
                 scalePos < 0 ? -1 : pos.get(scalePos));
-        ((TextView) findViewById(R.id.scaleText)).setText(Scales.ROOTS[root] + " " + Scales.NAMES[type].toLowerCase(Locale.ROOT)
-                + ": " + Scales.list(root, type) + "   ·   ladenie " + Tunings.NAMES[prefs.getInt("tuning", 0)]);
+        ((TextView) findViewById(R.id.scaleText)).setText(getString(R.string.scale_text, Scales.name(root),
+                Scales.NAMES[type].toLowerCase(Locale.getDefault()), Scales.list(root, type), Tunings.NAMES[prefs.getInt("tuning", 0)]));
+    }
+
+    /** Tónina slovami: „E mol“ / „E minor“. */
+    String keyName(int root, boolean minor) {
+        return getString(minor ? R.string.minor_key : R.string.major_key, Scales.name(root));
     }
 
     /** Stupnica k riffu: tónina z údajov riffu, inak sa zistí z nahrávky; potom si ju dá človek zmeniť. */
@@ -2798,7 +2802,7 @@ public class MainActivity extends Activity {
             setScalePanel(true);
             return;
         }
-        notice("Zisťujem tóninu…", null, null);
+        notice(getString(R.string.detecting_key), null, null);
         Uri uri = r.uri();
         IO.execute(() -> {
             int[] key = null;
@@ -2817,7 +2821,7 @@ public class MainActivity extends Activity {
             int[] found = key;
             ui.post(() -> {
                 if (found == null) {
-                    notice("Tóninu sa nepodarilo zistiť – vyberte ju v paneli stupnice.", null, null);
+                    notice(getString(R.string.key_not_found), null, null);
                     setScalePanel(true);
                     return;
                 }
@@ -2826,8 +2830,7 @@ public class MainActivity extends Activity {
                 render();
                 setScale(found[0], found[1] == 1 ? Scales.MINOR_PENTA : Scales.MAJOR_PENTA);
                 setScalePanel(true);
-                notice("Tónina riffu: " + Scales.ROOTS[found[0]] + (found[1] == 1 ? " mol" : " dur")
-                        + " (zmeniť ju môžete v paneli)", null, null);
+                notice(getString(R.string.riff_key, keyName(found[0], found[1] == 1)), null, null);
             });
         });
     }
@@ -2927,7 +2930,7 @@ public class MainActivity extends Activity {
         int preset = prefs.getInt("backPreset", 4);
         LinearLayout presets = findViewById(R.id.backPresets);
         presets.removeAllViews();
-        presets.addView(chip("Tónina: " + Scales.ROOTS[key] + (minor ? " mol" : " dur") + " ▾", false, this::backingKeyDialog));
+        presets.addView(chip(getString(R.string.key_chip, keyName(key, minor)), false, this::backingKeyDialog));
         for (int i = 0; i < Backing.PRESETS.length; i++) {
             int index = i;
             presets.addView(chip(Backing.PRESETS[i], i == preset, () -> {
@@ -2954,20 +2957,20 @@ public class MainActivity extends Activity {
         LinearLayout opts = findViewById(R.id.backOptions);
         opts.removeAllViews();
         int bars = prefs.getInt("backBars", 1);
-        opts.addView(chip(bars == 1 ? "Akord na 1 takt" : "Akord na 2 takty", false, () -> {
+        opts.addView(chip(getString(bars == 1 ? R.string.chord_1bar : R.string.chord_2bars), false, () -> {
             prefs.edit().putInt("backBars", bars == 1 ? 2 : 1).apply();
             backingChanged();
         }));
-        opts.addView(chip("Basa", prefs.getBoolean("backBass", true), () -> {
+        opts.addView(chip(getString(R.string.bass), prefs.getBoolean("backBass", true), () -> {
             prefs.edit().putBoolean("backBass", !prefs.getBoolean("backBass", true)).apply();
             backingChanged();
         }));
-        opts.addView(chip("Klávesy", prefs.getBoolean("backKeys", true), () -> {
+        opts.addView(chip(getString(R.string.keys), prefs.getBoolean("backKeys", true), () -> {
             prefs.edit().putBoolean("backKeys", !prefs.getBoolean("backKeys", true)).apply();
             backingChanged();
         }));
         boolean drums = prefs.getBoolean("backDrums", true);
-        opts.addView(chip("Bicie: " + Drums.STYLES[prefs.getInt("drumStyle", 0)], drums, () -> {
+        opts.addView(chip(getString(R.string.drums_chip, Drums.NAMES[prefs.getInt("drumStyle", 0)]), drums, () -> {
             boolean on = !prefs.getBoolean("backDrums", true);
             prefs.edit().putBoolean("backDrums", on).apply();
             if (DRUMS.backing != null && !DRUMS.following()) DRUMS.mode = on ? Drums.DRUMS : Drums.OFF;
@@ -2975,10 +2978,9 @@ public class MainActivity extends Activity {
             showTools();
         }));
         boolean playing = DRUMS.backing != null;
-        ((Button) findViewById(R.id.backPlay)).setText(playing ? "■ Zastaviť" : "▶ Hrať");
-        ((TextView) findViewById(R.id.backText)).setText(playing
-                ? "Hrá v tempe " + bpm + ". Ťuknutím na akord ho zmeníte. Stupnica k tomu ukáže, čo sa hodí do sóla – zelené sú tóny práve hraného akordu."
-                : "Vyberte postup a tóninu, potom Hrať. Štýl bicích a tempo nastavíte podržaním 🥁 a ♩. Sprievod sedí aj s looperom.");
+        ((Button) findViewById(R.id.backPlay)).setText(playing ? R.string.stop_btn : R.string.play_btn);
+        ((TextView) findViewById(R.id.backText)).setText(playing ? getString(R.string.backing_playing, bpm)
+                : getString(R.string.backing_idle));
         backingTick();
     }
 
@@ -3000,11 +3002,11 @@ public class MainActivity extends Activity {
     void backingKeyDialog() {
         String[] keys = new String[24];
         for (int i = 0; i < 12; i++) {
-            keys[2 * i] = Scales.ROOTS[i] + " dur";
-            keys[2 * i + 1] = Scales.ROOTS[i] + " mol";
+            keys[2 * i] = keyName(i, false);
+            keys[2 * i + 1] = keyName(i, true);
         }
         new AlertDialog.Builder(this)
-                .setTitle("Tónina sprievodu")
+                .setTitle(R.string.backing_key)
                 .setItems(keys, (x, which) -> {
                     prefs.edit().putInt("backKey", which / 2).putBoolean("backMinor", which % 2 == 1).apply();
                     backingChanged();
@@ -3018,9 +3020,9 @@ public class MainActivity extends Activity {
         int[][] options = Backing.diatonic(prefs.getBoolean("backMinor", true));
         List<String> names = new ArrayList<>();
         for (int[] o : options) names.add(Backing.name(Math.floorMod(key + o[0], 12), o[1]));
-        if (index >= 0) names.add("Odstrániť");
+        if (index >= 0) names.add(getString(R.string.remove));
         new AlertDialog.Builder(this)
-                .setTitle(index < 0 ? "Pridať akord" : "Zmeniť akord")
+                .setTitle(index < 0 ? R.string.add_chord : R.string.change_chord)
                 .setItems(names.toArray(new String[0]), (x, which) -> {
                     List<int[]> prog = new ArrayList<>(java.util.Arrays.asList(progression()));
                     if (which >= options.length) {
@@ -3055,20 +3057,20 @@ public class MainActivity extends Activity {
         }
         java.util.Arrays.fill(tuned, false);
         showTunings();
-        tunerText.setText("Zahrajte jednu strunu.");
+        tunerText.setText(R.string.play_string);
         Tuner t = new Tuner();
         t.a4 = prefs.getInt("a4", 440);
         long[] lastSeen = {0};
         t.listener = (p, db) -> ui.post(() -> {
             if (!tunerOn) return;
-            ((TextView) findViewById(R.id.tunerLevel)).setText(db < -55 ? "Signál: ticho – ladička nič nepočuje"
-                    : String.format(Locale.ROOT, "Signál: %.0f dB", db));
+            ((TextView) findViewById(R.id.tunerLevel)).setText(db < -55 ? getString(R.string.signal_silent)
+                    : getString(R.string.signal_db, String.format(Locale.ROOT, "%.0f", db)));
             long now = SystemClock.uptimeMillis();
             if (p == null) {
                 // Krátke výpadky (doznievanie) nemažú poslednú notu hneď.
                 if (now - lastSeen[0] > 1200) {
                     tunerView.clear();
-                    tunerText.setText(db < -55 ? "Zahrajte jednu strunu." : "Počujem zvuk, ale nie jasný tón – zahrajte jednu strunu.");
+                    tunerText.setText(db < -55 ? R.string.play_string : R.string.no_clear_pitch);
                     inTuneString = -1;
                 }
                 return;
@@ -3080,9 +3082,9 @@ public class MainActivity extends Activity {
             String name = s >= 0 ? Tunings.note(strings[s]) : p.note();
             boolean ok = Math.abs(cents) < TunerView.OK;
             tunerView.set(name, cents);
-            tunerText.setText(String.format(Locale.ROOT, "%s%+.0f centov   %.1f Hz   %s",
-                    s >= 0 ? (6 - s) + ". struna · " : "", cents, p.hz,
-                    ok ? "naladené" : cents < 0 ? "pritiahnuť" : "povoliť"));
+            tunerText.setText(getString(R.string.tuner_line, s >= 0 ? getString(R.string.string_n, 6 - s) : "",
+                    String.format(Locale.ROOT, "%+.0f", cents), String.format(Locale.ROOT, "%.1f", p.hz),
+                    getString(ok ? R.string.in_tune : cents < 0 ? R.string.tune_up : R.string.tune_down)));
             // Struna je naladená, keď sa drží v tolerancii aspoň 0,4 s.
             if (ok && s >= 0) {
                 if (inTuneString != s) {
@@ -3174,39 +3176,39 @@ public class MainActivity extends Activity {
     void options(Riff r) {
         List<String> items = new ArrayList<>();
         List<Runnable> actions = new ArrayList<>();
-        items.add(r.info.favorite ? "☆ Odobrať z obľúbených" : "★ Pridať k obľúbeným");
+        items.add(getString(r.info.favorite ? R.string.fav_remove : R.string.fav_add));
         actions.add(() -> {
             r.info.favorite = !r.info.favorite;
             saveMeta(r);
             render();
         });
-        items.add("Poznámka, tempo, tónina");
+        items.add(getString(R.string.opt_info));
         actions.add(() -> editInfo(r));
-        items.add(r.info.tone.isEmpty() ? "🎛 Zvuk (ToneX)" : "🎛 Zvuk: " + r.info.tone);
+        items.add(r.info.tone.isEmpty() ? getString(R.string.opt_tone) : getString(R.string.opt_tone_is, r.info.tone));
         actions.add(() -> toneDialog(r));
-        items.add(r.info.song.isEmpty() ? "🎵 Zaradiť do piesne" : "🎵 Pieseň: " + r.info.song);
+        items.add(r.info.song.isEmpty() ? getString(R.string.opt_song) : getString(R.string.opt_song_is, r.info.song));
         actions.add(() -> songDialog(r));
         if (filter == SONGS && !r.info.song.isEmpty()) {
-            items.add("↑ Posunúť v piesni vyššie");
+            items.add(getString(R.string.opt_up));
             actions.add(() -> moveInSong(r, -1));
-            items.add("↓ Posunúť v piesni nižšie");
+            items.add(getString(R.string.opt_down));
             actions.add(() -> moveInSong(r, 1));
         }
-        items.add("Premenovať");
+        items.add(getString(R.string.rename));
         actions.add(() -> rename(r));
-        items.add("🎼 Stupnica a tónina" + (r.info.key.isEmpty() ? "" : " (" + r.info.key + ")"));
+        items.add(getString(R.string.opt_scale) + (r.info.key.isEmpty() ? "" : " (" + r.info.key + ")"));
         actions.add(() -> scaleFor(r));
-        items.add(r.info.bpm > 0 ? "Zistiť tempo znova z hrania" : "Zistiť tempo z hrania");
+        items.add(getString(r.info.bpm > 0 ? R.string.opt_tempo_again : R.string.opt_tempo));
         actions.add(() -> detectTempo(r, null));
-        items.add("Poslať ako WAV (plná kvalita)");
+        items.add(getString(R.string.opt_wav));
         actions.add(() -> share(r.uri(), "audio/wav", label(r.name)));
-        items.add("Poslať ako M4A (menší súbor)");
+        items.add(getString(R.string.opt_m4a));
         actions.add(() -> shareM4a(r));
-        items.add("🥁 Poslať s bicími (M4A)");
+        items.add(getString(R.string.opt_drums));
         actions.add(() -> shareWithDrums(r));
-        items.add("Poslať na test (Disk)");
+        items.add(getString(R.string.opt_test));
         actions.add(() -> sendForTest(java.util.Collections.singletonList(r)));
-        items.add("Zmazať");
+        items.add(getString(R.string.delete));
         actions.add(() -> delete(r));
         new AlertDialog.Builder(this)
                 .setTitle(label(r.name))
@@ -3274,7 +3276,7 @@ public class MainActivity extends Activity {
         ArrayList<Uri> uris = new ArrayList<>();
         for (Riff r : riffs) if (!onlyNew || r.added > last) uris.add(r.uri());
         if (uris.isEmpty()) {
-            notice("Nič nové na zálohovanie.", null, null);
+            notice(getString(R.string.nothing_to_backup), null, null);
             showBackupInfo();
             return;
         }
@@ -3285,7 +3287,7 @@ public class MainActivity extends Activity {
         try {
             startActivity(new Intent(send).setPackage(DRIVE));
         } catch (android.content.ActivityNotFoundException e) {
-            startActivity(Intent.createChooser(send, "Zálohovať"));
+            startActivity(Intent.createChooser(send, getString(R.string.backup)));
         }
         prefs.edit().putLong("lastBackup", System.currentTimeMillis() / 1000).apply();
         showBackupInfo();
@@ -3295,11 +3297,10 @@ public class MainActivity extends Activity {
         long last = prefs.getLong("lastBackup", 0);
         int fresh = 0;
         for (Riff r : riffs) if (r.added > last) fresh++;
-        ((TextView) findViewById(R.id.backupInfo)).setText((last == 0 ? "Zatiaľ nezálohované."
-                : "Posledná záloha: " + DateFormat.format("d. M. yyyy H:mm", new Date(last * 1000)) + ".")
-                + " Nových riffov: " + fresh + ". Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka "
-                + "„Riffy záloha“. Poznámky, tempo, piesne a značky sú uložené priamo v súboroch.");
-        ((Button) findViewById(R.id.backupNew)).setText("Zálohovať nové (" + fresh + ")");
+        ((TextView) findViewById(R.id.backupInfo)).setText((last == 0 ? getString(R.string.backup_never)
+                : getString(R.string.backup_last, DateFormat.format(getString(R.string.datetime_format), new Date(last * 1000))))
+                + getString(R.string.backup_info, fresh));
+        ((Button) findViewById(R.id.backupNew)).setText(getString(R.string.backup_new, fresh));
     }
 
     // ---- Zvuk pri riffe ----
@@ -3307,7 +3308,7 @@ public class MainActivity extends Activity {
     /** Hlásenie po uložení; zvuk sa dá hneď zmeniť (nový riff dostane naposledy použitý). */
     void savedNotice(String saved) {
         String tone = prefs.getString("lastTone", "");
-        notice("Uložené: " + label(saved) + (tone.isEmpty() ? "" : " · 🎛 " + tone), "Zvuk", () -> {
+        notice(getString(R.string.saved_n, label(saved)) + (tone.isEmpty() ? "" : " · 🎛 " + tone), getString(R.string.tone), () -> {
             for (Riff r : riffs) {
                 if (r.name.equals(saved)) {
                     toneDialog(r);
@@ -3340,14 +3341,14 @@ public class MainActivity extends Activity {
         int pad = Math.round(20 * d);
         box.setPadding(pad, pad / 2, pad, 0);
         EditText field = new EditText(this);
-        field.setHint("napr. Marshall crunch, preset 3");
+        field.setHint(R.string.tone_hint);
         field.setText(r.info.tone);
         field.setSingleLine(true);
         box.addView(field);
         List<String> recent = recentTones();
         if (!recent.isEmpty()) {
             TextView label = new TextView(this);
-            label.setText("Naposledy použité");
+            label.setText(R.string.recently_used);
             label.setPadding(0, Math.round(10 * d), 0, Math.round(4 * d));
             box.addView(label);
             HorizontalScrollView scroll = new HorizontalScrollView(this);
@@ -3367,15 +3368,15 @@ public class MainActivity extends Activity {
             box.addView(scroll);
         }
         new AlertDialog.Builder(this)
-                .setTitle("Zvuk (ToneX)")
+                .setTitle(R.string.tone_title)
                 .setView(box)
-                .setPositiveButton("Uložiť", (x, w) -> {
+                .setPositiveButton(R.string.save, (x, w) -> {
                     r.info.tone = field.getText().toString().trim();
                     rememberTone(r.info.tone);
                     saveMeta(r);
                     render();
                 })
-                .setNegativeButton("Zrušiť", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -3395,7 +3396,7 @@ public class MainActivity extends Activity {
         int pad = Math.round(20 * d);
         box.setPadding(pad, pad / 2, pad, 0);
         android.widget.AutoCompleteTextView song = new android.widget.AutoCompleteTextView(this);
-        song.setHint("Pieseň (napr. Nová pieseň)");
+        song.setHint(R.string.song_hint);
         song.setText(r.info.song);
         song.setThreshold(0);
         song.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line, songs()));
@@ -3403,17 +3404,17 @@ public class MainActivity extends Activity {
             if (f) song.showDropDown();
         });
         android.widget.AutoCompleteTextView part = new android.widget.AutoCompleteTextView(this);
-        part.setHint("Časť (napr. Sloha, Refrén, Sólo)");
+        part.setHint(R.string.part_hint);
         part.setText(r.info.part);
         part.setThreshold(0);
         part.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_dropdown_item_1line,
-                new String[]{"Intro", "Sloha", "Refrén", "Bridge", "Sólo", "Outro"}));
+                getResources().getStringArray(R.array.song_parts)));
         box.addView(song);
         box.addView(part);
         AlertDialog.Builder b = new AlertDialog.Builder(this)
-                .setTitle("Pieseň")
+                .setTitle(R.string.song)
                 .setView(box)
-                .setPositiveButton("Uložiť", (x, w) -> {
+                .setPositiveButton(R.string.save, (x, w) -> {
                     String name = song.getText().toString().trim();
                     if (!name.equalsIgnoreCase(r.info.song)) {
                         int max = 0;
@@ -3426,8 +3427,8 @@ public class MainActivity extends Activity {
                     saveMeta(r);
                     render();
                 })
-                .setNegativeButton("Zrušiť", null);
-        if (!r.info.song.isEmpty()) b.setNeutralButton("Vyradiť", (x, w) -> {
+                .setNegativeButton(R.string.cancel, null);
+        if (!r.info.song.isEmpty()) b.setNeutralButton(R.string.song_remove, (x, w) -> {
             r.info.song = "";
             r.info.part = "";
             saveMeta(r);
@@ -3467,9 +3468,9 @@ public class MainActivity extends Activity {
 
     /** Zistí tempo a prvú dobu z úderov v riffe; potom zavolá then (ak sa podarilo). */
     void detectTempo(Riff r, Runnable then) {
-        notice("Zisťujem tempo…", null, null);
+        notice(getString(R.string.detecting_tempo), null, null);
         Uri uri = r.uri();
-        int beats = Drums.PATTERNS[Math.max(0, Drums.styleIndex(drumStyleOf(r)))].beats;
+        int beats = Drums.PATTERNS[Math.max(0, Drums.styleIndex(drumStyleKey(r)))].beats;
         IO.execute(() -> {
             int[] t = null;
             try {
@@ -3487,7 +3488,7 @@ public class MainActivity extends Activity {
             int[] found = t;
             ui.post(() -> {
                 if (found == null) {
-                    notice("Tempo sa nedalo zistiť (hrá sa voľne?). Zadajte ho v ⋮ → Poznámka, tempo.", "Zadať", () -> editInfo(r));
+                    notice(getString(R.string.tempo_not_found), getString(R.string.enter), () -> editInfo(r));
                     return;
                 }
                 r.info.bpm = found[0];
@@ -3495,7 +3496,7 @@ public class MainActivity extends Activity {
                 r.info.aligned = true;
                 saveMeta(r);
                 render();
-                notice("Tempo " + found[0] + " BPM", null, null);
+                notice(getString(R.string.tempo_found, found[0]), null, null);
                 if (then != null) then.run();
             });
         });
@@ -3509,8 +3510,8 @@ public class MainActivity extends Activity {
             detectTempo(r, () -> shareWithDrums(r));
             return;
         }
-        notice("Miešam riff s bicími…", null, null);
-        int style = Math.max(0, Drums.styleIndex(drumStyleOf(r)));
+        notice(getString(R.string.mixing), null, null);
+        int style = Math.max(0, Drums.styleIndex(drumStyleKey(r)));
         int fills = DRUMS.fillBars, beat0 = Math.max(0, r.info.beat0);
         float bpmR = r.info.bpm, vol = DRUMS.volume;
         short[][] kit = Drums.load(this);
@@ -3523,11 +3524,11 @@ public class MainActivity extends Activity {
                 try (InputStream in = new FileInputStream(wav)) {
                     M4a.convert(in, m4a);
                 }
-                Uri uri = publishShared(m4a, r.name + " (bicie)");
-                ui.post(() -> share(uri, "audio/mp4", label(r.name) + " s bicími"));
+                Uri uri = publishShared(m4a, getString(R.string.with_drums_file, r.name));
+                ui.post(() -> share(uri, "audio/mp4", getString(R.string.with_drums_title, label(r.name))));
             } catch (Exception e) {
                 String msg = e.getMessage();
-                ui.post(() -> notice("Zmiešanie sa nepodarilo: " + msg, null, null));
+                ui.post(() -> notice(getString(R.string.mix_failed, msg), null, null));
             } finally {
                 wav.delete();
                 m4a.delete();
@@ -3541,10 +3542,10 @@ public class MainActivity extends Activity {
         ContentValues v = new ContentValues();
         v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".m4a");
         v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4");
-        v.put(MediaStore.Audio.Media.RELATIVE_PATH, SHARED);
+        v.put(MediaStore.Audio.Media.RELATIVE_PATH, FOLDER + getString(R.string.shared_folder) + "/");
         v.put(MediaStore.Audio.Media.IS_PENDING, 1);
         Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
-        if (uri == null) throw new IOException("M4A sa nepodarilo uložiť.");
+        if (uri == null) throw new IOException(getString(R.string.m4a_failed));
         try (InputStream in = new FileInputStream(m4a); OutputStream out = cr.openOutputStream(uri)) {
             byte[] buf = new byte[65536];
             int n;
@@ -3562,14 +3563,14 @@ public class MainActivity extends Activity {
         int pad = Math.round(20 * getResources().getDisplayMetrics().density);
         box.setPadding(pad, pad / 2, pad, 0);
         EditText note = new EditText(this);
-        note.setHint("Poznámka");
+        note.setHint(R.string.note);
         note.setText(r.info.note);
         EditText tempo = new EditText(this);
-        tempo.setHint("Tempo (BPM)");
+        tempo.setHint(R.string.tempo_bpm);
         tempo.setInputType(InputType.TYPE_CLASS_NUMBER);
         if (r.info.bpm > 0) tempo.setText(String.valueOf(r.info.bpm));
         EditText key = new EditText(this);
-        key.setHint("Tónina (napr. Am)");
+        key.setHint(R.string.key_hint);
         key.setText(r.info.key);
         box.addView(note);
         box.addView(tempo);
@@ -3577,7 +3578,7 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle(label(r.name))
                 .setView(box)
-                .setPositiveButton("Uložiť", (d, w) -> {
+                .setPositiveButton(R.string.save, (d, w) -> {
                     r.info.note = note.getText().toString().trim();
                     r.info.key = key.getText().toString().trim();
                     try {
@@ -3588,7 +3589,7 @@ public class MainActivity extends Activity {
                     saveMeta(r);
                     render();
                 })
-                .setNegativeButton("Zrušiť", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -3597,20 +3598,20 @@ public class MainActivity extends Activity {
         field.setText(label(r.name).replace(" · ", " "));
         field.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this)
-                .setTitle("Premenovať")
+                .setTitle(R.string.rename)
                 .setView(field)
-                .setPositiveButton("Uložiť", (d, w) -> {
+                .setPositiveButton(R.string.save, (d, w) -> {
                     String name = field.getText().toString().trim().replaceAll("[/\\\\:]", "-");
                     if (name.isEmpty() || name.equals(r.name)) return;
                     for (Riff o : riffs) {
                         if (o != r && o.name.equalsIgnoreCase(name)) {
-                            notice("Riff s menom „" + name + "“ už existuje.", null, null);
+                            notice(getString(R.string.name_exists, name), null, null);
                             return;
                         }
                     }
                     renameTo(r, name, true);
                 })
-                .setNegativeButton("Zrušiť", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -3641,9 +3642,9 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) {
                 }
             }
-            notice("Android nedovolil nahrávku premenovať.", null, null);
+            notice(getString(R.string.rename_denied), null, null);
         } catch (Exception e) {
-            notice("Túto nahrávku sa nedá premenovať: " + e.getMessage(), null, null);
+            notice(getString(R.string.rename_failed, e.getMessage()), null, null);
         }
         loadRiffs();
     }
@@ -3658,7 +3659,7 @@ public class MainActivity extends Activity {
 
     /** Prevedie riff do M4A, uloží ho do Hudba/Riffy/Zdieľané a ponúkne na poslanie. */
     void shareM4a(Riff r) {
-        notice("Pripravujem M4A…", null, null);
+        notice(getString(R.string.preparing_m4a), null, null);
         IO.execute(() -> {
             File temp = new File(getCacheDir(), "zdielanie.m4a");
             try {
@@ -3669,10 +3670,10 @@ public class MainActivity extends Activity {
                 ContentValues v = new ContentValues();
                 v.put(MediaStore.Audio.Media.DISPLAY_NAME, r.name + ".m4a");
                 v.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4");
-                v.put(MediaStore.Audio.Media.RELATIVE_PATH, SHARED);
+                v.put(MediaStore.Audio.Media.RELATIVE_PATH, FOLDER + getString(R.string.shared_folder) + "/");
                 v.put(MediaStore.Audio.Media.IS_PENDING, 1);
                 Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
-                if (uri == null) throw new IOException("M4A sa nepodarilo uložiť.");
+                if (uri == null) throw new IOException(getString(R.string.m4a_failed));
                 try (InputStream in = new FileInputStream(temp); OutputStream out = cr.openOutputStream(uri)) {
                     byte[] buf = new byte[65536];
                     int n;
@@ -3684,7 +3685,7 @@ public class MainActivity extends Activity {
                 ui.post(() -> share(uri, "audio/mp4", label(r.name)));
             } catch (Exception e) {
                 String msg = e.getMessage();
-                ui.post(() -> notice("Prevod sa nepodaril: " + msg, null, null));
+                ui.post(() -> notice(getString(R.string.convert_failed, msg), null, null));
             } finally {
                 temp.delete();
             }
@@ -3709,8 +3710,9 @@ public class MainActivity extends Activity {
         for (Riff r : items) if (r.id == playing) stopPlaying();
         pendingDelete.addAll(items);
         render();
-        String what = items.size() == 1 ? label(items.get(0).name) : items.size() + " riffov";
-        notice("Zmazané: " + what, "Vrátiť", () -> {
+        String what = items.size() == 1 ? label(items.get(0).name)
+                : getResources().getQuantityString(R.plurals.riffs, items.size(), items.size());
+        notice(getString(R.string.deleted_n, what), getString(R.string.undo), () -> {
             pendingDelete.clear();
             ui.removeCallbacks(commitDelete);
             render();
@@ -3739,7 +3741,7 @@ public class MainActivity extends Activity {
                 startIntentSenderForResult(MediaStore.createDeleteRequest(getContentResolver(), foreign)
                         .getIntentSender(), ASK_DELETE, null, 0, 0, 0);
             } catch (Exception e) {
-                notice("Niektoré nahrávky sa nedajú zmazať.", null, null);
+                notice(getString(R.string.cant_delete_some), null, null);
             }
         }
         loadRiffs();
@@ -3768,7 +3770,7 @@ public class MainActivity extends Activity {
         selectBar.setVisibility(on ? View.VISIBLE : View.GONE);
         filterRow.setVisibility(on ? View.GONE : View.VISIBLE);
         int n = selection.size();
-        selectCount.setText(n == 1 ? "1 vybraný" : n >= 2 && n <= 4 ? n + " vybrané" : n + " vybraných");
+        selectCount.setText(getResources().getQuantityString(R.plurals.selected, n, n));
         adapter.notifyDataSetChanged();
     }
 
@@ -3793,7 +3795,7 @@ public class MainActivity extends Activity {
         send.setType("audio/wav");
         send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivity(Intent.createChooser(send, uris.size() + " riffov"));
+        startActivity(Intent.createChooser(send, getResources().getQuantityString(R.plurals.riffs, uris.size(), uris.size())));
         clearSelection();
     }
 
@@ -3808,7 +3810,7 @@ public class MainActivity extends Activity {
         List<Riff> chosen = selectedRiffs();
         clearSelection();
         if (chosen.isEmpty()) return;
-        notice("Pripravujem ZIP…", null, null);
+        notice(getString(R.string.preparing_zip), null, null);
         IO.execute(() -> {
             try {
                 ContentResolver cr = getContentResolver();
@@ -3818,7 +3820,7 @@ public class MainActivity extends Activity {
                 v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Riffy/");
                 v.put(MediaStore.Downloads.IS_PENDING, 1);
                 Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-                if (uri == null) throw new IOException("ZIP sa nepodarilo vytvoriť.");
+                if (uri == null) throw new IOException(getString(R.string.zip_failed_create));
                 StringBuilder notes = new StringBuilder();
                 Set<String> used = new HashSet<>();
                 try (ZipOutputStream z = new ZipOutputStream(new BufferedOutputStream(cr.openOutputStream(uri), 1 << 16))) {
@@ -3845,7 +3847,7 @@ public class MainActivity extends Activity {
                         }
                     }
                     if (notes.length() > 0) {
-                        z.putNextEntry(new ZipEntry("poznamky.txt"));
+                        z.putNextEntry(new ZipEntry(getString(R.string.notes_file)));
                         z.write(notes.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                         z.closeEntry();
                     }
@@ -3853,10 +3855,10 @@ public class MainActivity extends Activity {
                 v.clear();
                 v.put(MediaStore.Downloads.IS_PENDING, 0);
                 cr.update(uri, v, null, null);
-                ui.post(() -> share(uri, "application/zip", chosen.size() + " riffov"));
+                ui.post(() -> share(uri, "application/zip", getResources().getQuantityString(R.plurals.riffs, chosen.size(), chosen.size())));
             } catch (Exception e) {
                 String msg = e.getMessage();
-                ui.post(() -> notice("ZIP sa nepodaril: " + msg, null, null));
+                ui.post(() -> notice(getString(R.string.zip_failed, msg), null, null));
             }
         });
     }
@@ -3870,7 +3872,7 @@ public class MainActivity extends Activity {
     void sendForTest(List<Riff> chosen) {
         if (chosen.isEmpty()) return;
         EditText played = new EditText(this);
-        played.setHint("Napr. pražce alebo tabulatúra (nepovinné)");
+        played.setHint(R.string.test_hint);
         played.setMinLines(3);
         played.setGravity(Gravity.TOP);
         int pad = Math.round(20 * getResources().getDisplayMetrics().density);
@@ -3879,10 +3881,10 @@ public class MainActivity extends Activity {
         box.addView(played, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
         new AlertDialog.Builder(this)
-                .setTitle("Čo ste hrali?")
-                .setMessage("Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka Riffy.")
+                .setTitle(R.string.what_played)
+                .setMessage(R.string.test_msg)
                 .setView(box)
-                .setPositiveButton("Poslať", (d, w) -> IO.execute(() -> {
+                .setPositiveButton(R.string.send, (d, w) -> IO.execute(() -> {
                     ArrayList<Uri> uris = new ArrayList<>();
                     for (Riff r : chosen) uris.add(r.uri());
                     String text = played.getText().toString().trim();
@@ -3901,11 +3903,11 @@ public class MainActivity extends Activity {
                             startActivity(new Intent(send).setPackage(DRIVE));
                         } catch (android.content.ActivityNotFoundException e) {
                             // Bez aplikácie Disk: bežná ponuka zdieľania.
-                            startActivity(Intent.createChooser(send, "Poslať na test"));
+                            startActivity(Intent.createChooser(send, getString(R.string.send_for_test)));
                         }
                     });
                 }))
-                .setNegativeButton("Zrušiť", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -3915,14 +3917,14 @@ public class MainActivity extends Activity {
         String base = fileName(DateFormat.format("yyyy-MM-dd", new Date(first.added * 1000)) + " " + label(first.name));
         StringBuilder body = new StringBuilder();
         for (Riff r : chosen) body.append("Riff: ").append(r.name).append(".wav\n");
-        body.append("Čo som hral:\n").append(text).append("\n");
+        body.append(getString(R.string.i_played)).append(text).append("\n");
         ContentResolver cr = getContentResolver();
         ContentValues v = new ContentValues();
-        v.put(MediaStore.Downloads.DISPLAY_NAME, base + " - co som hral.txt");
+        v.put(MediaStore.Downloads.DISPLAY_NAME, base + getString(R.string.played_file));
         v.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
         v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Riffy/");
         Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-        if (uri == null) throw new IOException("Text sa nepodarilo uložiť.");
+        if (uri == null) throw new IOException(getString(R.string.text_failed));
         try (OutputStream out = cr.openOutputStream(uri)) {
             out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
@@ -3987,7 +3989,7 @@ public class MainActivity extends Activity {
                 long frames = Wav.repair(f);
                 long started = Long.parseLong(n.substring(9, n.length() - 4));
                 if (frames > 22050) {
-                    save(f, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(started)) + " obnovené", 0, null);
+                    save(f, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(started)) + getString(R.string.suffix_recovered), 0, null);
                     saved++;
                 }
             } catch (Exception ignored) {
@@ -3997,7 +3999,7 @@ public class MainActivity extends Activity {
         if (saved > 0) {
             int count = saved;
             ui.post(() -> {
-                notice(count == 1 ? "Obnovená prerušená nahrávka." : "Obnovené prerušené nahrávky: " + count, null, null);
+                notice(count == 1 ? getString(R.string.recovered_one) : getString(R.string.recovered_n, count), null, null);
                 loadRiffs();
             });
         }
@@ -4024,32 +4026,32 @@ public class MainActivity extends Activity {
         diaryShownAt = SystemClock.uptimeMillis();
         LocalDate today = LocalDate.now();
         int streak = diary.streak(today);
-        diaryText.setText("Dnes hrané " + Diary.minutes(diary.on(today))
-                + (streak >= 2 ? "  ·  " + streak + " dni po sebe" : "") + "  ›");
+        diaryText.setText(getString(R.string.played_today, Diary.minutes(diary.on(today)))
+                + (streak >= 2 ? "  ·  " + getResources().getQuantityString(R.plurals.days_in_row, streak, streak) : "") + "  ›");
     }
 
     void showDiary() {
         LocalDate today = LocalDate.now();
-        DateTimeFormatter f = DateTimeFormatter.ofPattern("EEE d. M.", new Locale("sk"));
+        DateTimeFormatter f = DateTimeFormatter.ofPattern(getString(R.string.weekday_format), Locale.getDefault());
         long max = 1;
         for (int i = 0; i < 14; i++) max = Math.max(max, diary.on(today.minusDays(i)));
         StringBuilder s = new StringBuilder();
-        s.append("Tento týždeň: ").append(Diary.minutes(diary.week(today))).append("\n");
-        s.append("Spolu: ").append(Diary.minutes(diary.total())).append("\n");
+        s.append(getString(R.string.this_week, Diary.minutes(diary.week(today))));
+        s.append(getString(R.string.total, Diary.minutes(diary.total())));
         int streak = diary.streak(today);
-        s.append("Dní po sebe: ").append(streak).append("\n\n");
+        s.append(getString(R.string.streak, streak));
         for (int i = 0; i < 14; i++) {
             LocalDate d = today.minusDays(i);
             long ms = diary.on(d);
             int bar = (int) Math.round(12.0 * ms / max);
-            s.append(i == 0 ? "dnes" : f.format(d)).append("   ");
+            s.append(i == 0 ? getString(R.string.today_lower) : f.format(d)).append("   ");
             for (int k = 0; k < bar; k++) s.append('▇');
             s.append(ms > 0 ? "  " + Diary.minutes(ms) : "  –").append("\n");
         }
         new AlertDialog.Builder(this)
-                .setTitle("Denník hrania")
+                .setTitle(R.string.diary)
                 .setMessage(s.toString())
-                .setPositiveButton("Zavrieť", null)
+                .setPositiveButton(R.string.close, null)
                 .show();
     }
 

@@ -2,7 +2,7 @@ package sk.lubeno.riffy;
 
 /** Ladenia gitary (MIDI tóny strún od 6. po 1.) a hľadanie struny, ktorá sa ladí. */
 final class Tunings {
-    static final String[] NAMES = {"Štandard", "Drop D", "Eb (o poltón nižšie)", "D štandard", "Drop C", "DADGAD", "Open G"};
+    static String[] NAMES = {"Štandard", "Drop D", "Eb (o poltón nižšie)", "D štandard", "Drop C", "DADGAD", "Open G"};
     static final int[][] STRINGS = {
             {40, 45, 50, 55, 59, 64},
             {38, 45, 50, 55, 59, 64},

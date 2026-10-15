@@ -7,7 +7,7 @@ import java.util.List;
 final class Scales {
     /** Názvy tónov; H = anglické B (aby sa nepomýlilo so slovenským B = A#). */
     static final String[] ROOTS = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
-    static final String[] NAMES = {"Pentatonika mol", "Pentatonika dur", "Blues", "Prirodzená mol", "Dur",
+    static String[] NAMES = {"Pentatonika mol", "Pentatonika dur", "Blues", "Prirodzená mol", "Dur",
             "Dórska", "Mixolydická", "Harmonická mol", "Frygická"};
     static final int[][] STEPS = {
             {0, 3, 5, 7, 10},

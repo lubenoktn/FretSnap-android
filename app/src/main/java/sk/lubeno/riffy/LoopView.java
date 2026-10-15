@@ -79,14 +79,15 @@ public class LoopView extends View {
         String text;
         if (waiting) {
             paint.setColor(0xFFE53935);
-            text = countdown > 0.05 ? "Začína o " + (int) Math.ceil(countdown - 0.05) : "Teraz!";
+            text = countdown > 0.05 ? getContext().getString(R.string.loop_starts_in, (int) Math.ceil(countdown - 0.05))
+                    : getContext().getString(R.string.loop_now);
         } else if (recording) {
             paint.setColor(0xFFE53935);
-            text = "● Nahrávam" + (layers > 0 ? " vrstvu " + (layers + 1) : "");
+            text = layers > 0 ? getContext().getString(R.string.loop_rec_layer, layers + 1) : getContext().getString(R.string.loop_rec);
         } else {
             paint.setColor(fg);
-            text = layers == 0 ? "Slučka " + bars + (bars == 1 ? " takt" : bars < 5 ? " takty" : " taktov")
-                    : layers + (layers == 1 ? " vrstva" : layers < 5 ? " vrstvy" : " vrstiev");
+            text = layers == 0 ? getContext().getString(R.string.loop_bars, getResources().getQuantityString(R.plurals.bars, bars, bars))
+                    : getResources().getQuantityString(R.plurals.layers, layers, layers);
         }
         c.drawText(text, w / 2, top * 0.75f, paint);
         paint.setFakeBoldText(false);

@@ -448,7 +448,7 @@ public class UsbAudio {
             if (raw == null || raw.length != fit) raw = new byte[fit];
             int n = nativeRead(handle, raw);
             if (n < 0) {
-                error = "Prenos z USB sa prerušil (" + errno(n) + ").";
+                error = Tr.s(R.string.usb_interrupted, errno(n));
                 return -1;
             }
             int count = Math.min(n / frameBytes, out.length / channels), k = 0;
@@ -574,9 +574,9 @@ public class UsbAudio {
 
     static Source open(UsbManager um, UsbDevice d, int want) throws IOException {
         load();
-        if (loadError != null) throw new IOException("Ovládač sa nedá načítať: " + loadError);
+        if (loadError != null) throw new IOException(Tr.s(R.string.driver_load, loadError));
         UsbDeviceConnection conn = um.openDevice(d);
-        if (conn == null) throw new IOException("USB zariadenie sa nedá otvoriť.");
+        if (conn == null) throw new IOException(Tr.s(R.string.usb_cant_open));
         Direct s = new Direct();
         s.conn = conn;
         s.dev = d;
@@ -586,7 +586,7 @@ public class UsbAudio {
             List<Alt> order = new ArrayList<>();
             for (Alt a : info.alts) if (a.usable()) order.add(a);
             order.sort((x, y) -> Integer.compare(Info.score(y), Info.score(x)));
-            if (order.isEmpty()) throw new IOException("V zariadení sa nenašiel zvukový vstup, ktorý by aplikácia vedela čítať.");
+            if (order.isEmpty()) throw new IOException(Tr.s(R.string.usb_no_input));
             UsbInterface ac = info.controlIface < 0 ? null : find(d, info.controlIface, 0);
             if (ac != null && !conn.claimInterface(ac, true)) log.append("Riadiace rozhranie sa nedá prevziať.\n");
 
@@ -625,8 +625,7 @@ public class UsbAudio {
                                 s.rate = rate;
                                 s.channels = Math.min(alt.channels, 2);
                                 s.frameBytes = alt.channels * alt.subslot;
-                                s.where = name(d) + " priamo cez USB (vlastný ovládač), " + alt.channels + " kan., "
-                                        + alt.bits + " bit, hodiny " + rate + " Hz";
+                                s.where = Tr.s(R.string.usb_where, name(d), alt.channels, alt.bits, rate);
                                 s.info = info;
                                 s.outAlt = info.bestOut();
                                 s.highSpeed = packetsPerSecond(alt, rate) > 1000;
@@ -642,7 +641,7 @@ public class UsbAudio {
                 UsbInterface zero = find(d, alt.iface, 0);
                 if (zero != null) conn.setInterface(zero);
             }
-            throw new IOException("Prenos z USB sa nedá spustiť.\n" + log);
+            throw new IOException(Tr.s(R.string.usb_cant_start) + log);
         } catch (IOException | RuntimeException e) {
             s.close();
             throw e;

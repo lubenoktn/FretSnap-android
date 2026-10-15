@@ -50,10 +50,15 @@ abstract class Source {
     }
 
     static String db(int peak) {
-        return peak == 0 ? "ticho" : String.format(Locale.ROOT, "%.0f dB", 20 * Math.log10(peak / 32768.0));
+        return peak == 0 ? silence() : String.format(Locale.ROOT, "%.0f dB", 20 * Math.log10(peak / 32768.0));
     }
 
     static String levels(int[] p) {
-        return p.length == 2 ? "ľavý " + db(p[0]) + ", pravý " + db(p[1]) : db(p[0]);
+        return p.length == 2 ? (Tr.res == null ? "ľavý " + db(p[0]) + ", pravý " + db(p[1])
+                : Tr.s(R.string.levels_lr, db(p[0]), db(p[1]))) : db(p[0]);
+    }
+
+    static String silence() {
+        return Tr.res == null ? "ticho" : Tr.s(R.string.silence);
     }
 }

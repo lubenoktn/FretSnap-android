@@ -29,14 +29,19 @@ public class RecordingService extends Service {
     }
 
     @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(Tr.wrap(base));
+    }
+
+    @Override
     public int onStartCommand(Intent intent, int flags, int id) {
         NotificationManager nm = getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(new NotificationChannel(CHANNEL, "Nahrávanie", NotificationManager.IMPORTANCE_LOW));
+        nm.createNotificationChannel(new NotificationChannel(CHANNEL, getString(R.string.channel_recording), NotificationManager.IMPORTANCE_LOW));
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         Notification n = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notify)
-                .setContentTitle("Riffy nahráva")
-                .setContentText("Ťuknutím sa vrátite do aplikácie.")
+                .setContentTitle(getString(R.string.notif_title))
+                .setContentText(getString(R.string.notif_text))
                 .setOngoing(true)
                 .setContentIntent(PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
                 .build();

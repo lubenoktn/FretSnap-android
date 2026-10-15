@@ -29,7 +29,12 @@ Zvuky bicích (`app/src/main/res/raw/d_*.pcm`) sú zo súpravy
 mono 48 kHz 16 bit.
 
 Návod pre používateľa je v aplikácii (? na hlavnej obrazovke, alebo Nastavenia → Návod);
-jeho text je v `app/src/main/assets/navod.html`. Pri zmene funkcií ho treba upraviť.
+jeho text je v `app/src/main/assets/navod.html` (po anglicky `navod-en.html`). Pri zmene funkcií treba upraviť oba.
+
+Aplikácia je po slovensky a po anglicky (Nastavenia → Jazyk, predvolene podľa telefónu). Texty sú
+v `app/src/main/res/values/strings.xml` (angličtina) a `values-sk/strings.xml` (slovenčina); nový jazyk
+je ďalší priečinok `values-xx`. Názvy štýlov bicích sa do riffov ukladajú po slovensky (`Drums.STYLES`),
+na obrazovke sa ukazujú preložené (`Drums.NAMES`).
 
 Sprievod: basa `res/raw/b*.pcm` je zo [Growlybass](https://github.com/sfzinstruments/karoryfer.growlybass)
 (Karoryfer Samples, CC0), klavír `res/raw/p*.pcm` z [VCSL](https://github.com/sgossner/VCSL) – Kawai grand

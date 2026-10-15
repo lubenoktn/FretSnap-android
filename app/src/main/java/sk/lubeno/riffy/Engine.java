@@ -134,7 +134,7 @@ final class Engine {
             if (!runOnce(opener, attempt, attempt < RETRIES)) break;
             Listener l = listener;
             if (l != null) {
-                l.onStatus("Zariadenie sa ešte zapína, skúšam ho otvoriť znova…");
+                l.onStatus(Tr.s(R.string.device_starting));
                 l.onRetry();
             }
             try {
@@ -180,7 +180,7 @@ final class Engine {
         }
         Listener l = listener;
         if (l != null) {
-            l.onStatus("Signál ide z: " + c.where);
+            l.onStatus(Tr.s(R.string.signal_from, c.where));
             l.onOpened(c);
         }
 
@@ -196,7 +196,7 @@ final class Engine {
                 }
                 int n = c.read(buf);
                 if (n < 0) {
-                    failure = c.error != null ? c.error : "Čítanie zo vstupu zlyhalo.";
+                    failure = c.error != null ? c.error : Tr.s(R.string.read_failed);
                     break;
                 }
                 long now = System.currentTimeMillis();
@@ -214,7 +214,7 @@ final class Engine {
                         try {
                             writer.write(buf, 0, n);
                         } catch (IOException e) {
-                            failure = "Nahrávka sa nedá zapisovať: " + e.getMessage();
+                            failure = Tr.s(R.string.write_failed, e.getMessage());
                             break;
                         }
                     }
@@ -261,7 +261,7 @@ final class Engine {
 
     /** Začne zapisovať; na začiatok dá posledných preSeconds z pamäte (automatické nahrávanie nestratí prvý tón). */
     synchronized void startRecording(File f, double preSeconds) throws IOException {
-        if (source == null) throw new IOException("Vstup ešte nebeží.");
+        if (source == null) throw new IOException(Tr.s(R.string.input_not_yet));
         writer = new Wav.Writer(f, source.channels, source.rate);
         long pre = 0;
         if (preSeconds > 0 && history != null) {

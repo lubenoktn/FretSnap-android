@@ -127,7 +127,7 @@ final class Wav {
         byte[] b = new byte[12];
         in.readFully(b);
         if (!new String(b, 0, 4, "US-ASCII").equals("RIFF") || !new String(b, 8, 4, "US-ASCII").equals("WAVE")) {
-            throw new IOException("Súbor nie je WAV.");
+            throw new IOException(Tr.s(R.string.not_wav));
         }
         Info info = new Info();
         byte[] head = new byte[8];
@@ -135,13 +135,13 @@ final class Wav {
             try {
                 in.readFully(head);
             } catch (EOFException e) {
-                throw new IOException("Vo WAV chýbajú zvukové dáta.");
+                throw new IOException(Tr.s(R.string.wav_no_data));
             }
             String id = new String(head, 0, 4, "US-ASCII");
             long size = le(head, 4, 4) & 0xffffffffL;
             if (id.equals("data")) {
                 info.dataSize = size;
-                if (info.channels == 0) throw new IOException("Vo WAV chýba popis formátu.");
+                if (info.channels == 0) throw new IOException(Tr.s(R.string.wav_no_format));
                 return info;
             }
             if (id.equals("fmt ")) {
@@ -259,7 +259,7 @@ final class Wav {
      */
     static void writeExtra(FileChannel read, FileChannel write, byte[] payload) throws IOException {
         long end = find(read, "data")[2];
-        if (end < 0) throw new IOException("Vo WAV chýbajú zvukové dáta.");
+        if (end < 0) throw new IOException(Tr.s(R.string.wav_no_data));
         write.truncate(end);
         ByteBuffer b = ByteBuffer.allocate(8 + payload.length + (payload.length & 1));
         b.put(EXTRA.getBytes(StandardCharsets.US_ASCII));

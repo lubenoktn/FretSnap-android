@@ -45,7 +45,7 @@
                 android:id="@+id/helpButton"
                 android:layout_width="40dp"
                 android:layout_height="48dp"
-                android:contentDescription="Návod"
+                android:contentDescription="@string/guide"
                 android:gravity="center"
                 android:text="?"
                 android:textSize="22sp" />
@@ -54,7 +54,7 @@
                 android:id="@+id/settingsButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:contentDescription="Nastavenia"
+                android:contentDescription="@string/settings"
                 android:gravity="center"
                 android:text="⚙"
                 android:textSize="24sp" />
@@ -75,7 +75,7 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="8dp"
-            android:contentDescription="Priebeh zvuku za posledných 30 sekúnd" />
+            android:contentDescription="@string/live_desc" />
 
         <sk.lubeno.riffy.LevelView
             android:id="@+id/level"
@@ -135,7 +135,7 @@
                 android:layout_marginLeft="24dp"
                 android:layout_marginRight="24dp"
                 android:background="@drawable/bg_rec"
-                android:contentDescription="Nahrávať"
+                android:contentDescription="@string/record"
                 android:text="●"
                 android:textColor="#FFFFFF"
                 android:textSize="36sp" />
@@ -145,7 +145,7 @@
                 android:layout_width="72dp"
                 android:layout_height="72dp"
                 android:background="@drawable/bg_circle"
-                android:text="♪\nLadička"
+                android:text="@string/tuner_button"
                 android:textAllCaps="false"
                 android:textSize="13sp" />
         </LinearLayout>
@@ -156,7 +156,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:gravity="center"
-            android:text="Ťuknutím zastavíte a uložíte"
+            android:text="@string/tap_stop"
             android:visibility="gone" />
 
         <Button
@@ -165,7 +165,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:layout_marginTop="8dp"
-            android:text="📍 Značka"
+            android:text="@string/mark_button"
             android:textAllCaps="false"
             android:visibility="gone" />
 
@@ -223,7 +223,7 @@
                 android:gravity="center"
                 android:paddingLeft="16dp"
                 android:paddingRight="16dp"
-                android:text="Odpočet"
+                android:text="@string/count_in"
                 android:textSize="15sp" />
         </LinearLayout>
 
@@ -254,7 +254,7 @@
                 android:gravity="center"
                 android:paddingLeft="16dp"
                 android:paddingRight="16dp"
-                android:text="🎼 Stupnica"
+                android:text="@string/scale_chip"
                 android:textSize="15sp" />
 
             <TextView
@@ -266,7 +266,7 @@
                 android:gravity="center"
                 android:paddingLeft="16dp"
                 android:paddingRight="16dp"
-                android:text="🎹 Sprievod"
+                android:text="@string/backing_chip"
                 android:textSize="15sp" />
         </LinearLayout>
         </LinearLayout>
@@ -350,7 +350,7 @@
                             android:id="@+id/a4Minus"
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:contentDescription="Komorné A nižšie"
+                            android:contentDescription="@string/a4_down"
                             android:gravity="center"
                             android:text="−" />
 
@@ -364,7 +364,7 @@
                             android:id="@+id/a4Plus"
                             android:layout_width="40dp"
                             android:layout_height="40dp"
-                            android:contentDescription="Komorné A vyššie"
+                            android:contentDescription="@string/a4_up"
                             android:gravity="center"
                             android:text="+" />
                     </LinearLayout>
@@ -444,7 +444,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="🎼 Stupnica k tomu"
+                            android:text="@string/scale_for_backing"
                             android:textAllCaps="false" />
                     </LinearLayout>
                 </LinearLayout>
@@ -546,7 +546,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:paddingRight="8dp"
-                            android:text="Takty" />
+                            android:text="@string/bars_label" />
                     </LinearLayout>
 
                     <LinearLayout
@@ -567,7 +567,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Späť"
+                            android:text="@string/undo_layer"
                             android:textAllCaps="false" />
 
                         <Button
@@ -602,7 +602,7 @@
                     android:id="@+id/selectClose"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:contentDescription="Zrušiť výber"
+                    android:contentDescription="@string/clear_selection"
                     android:gravity="center"
                     android:text="✕"
                     android:textSize="18sp" />
@@ -618,7 +618,7 @@
                     android:id="@+id/selectFav"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:contentDescription="Obľúbené"
+                    android:contentDescription="@string/favorites"
                     android:gravity="center"
                     android:text="★"
                     android:textColor="#F9A825"
@@ -631,7 +631,7 @@
                     android:gravity="center"
                     android:paddingLeft="10dp"
                     android:paddingRight="10dp"
-                    android:text="Poslať" />
+                    android:text="@string/send" />
 
                 <TextView
                     android:id="@+id/selectZip"
@@ -649,7 +649,7 @@
                     android:gravity="center"
                     android:paddingLeft="8dp"
                     android:paddingRight="8dp"
-                    android:text="Na test" />
+                    android:text="@string/to_test" />
 
                 <TextView
                     android:id="@+id/selectDelete"
@@ -658,7 +658,7 @@
                     android:gravity="center"
                     android:paddingLeft="10dp"
                     android:paddingRight="10dp"
-                    android:text="Zmazať"
+                    android:text="@string/delete"
                     android:textColor="#E53935" />
             </LinearLayout>
 
@@ -677,7 +677,7 @@
                     android:gravity="center"
                     android:paddingLeft="14dp"
                     android:paddingRight="14dp"
-                    android:text="Všetky" />
+                    android:text="@string/all" />
 
                 <TextView
                     android:id="@+id/filterFav"
@@ -688,7 +688,7 @@
                     android:gravity="center"
                     android:paddingLeft="14dp"
                     android:paddingRight="14dp"
-                    android:text="★ Obľúbené" />
+                    android:text="@string/fav_filter" />
 
                 <TextView
                     android:id="@+id/filterSongs"
@@ -699,7 +699,7 @@
                     android:gravity="center"
                     android:paddingLeft="14dp"
                     android:paddingRight="14dp"
-                    android:text="🎵 Piesne" />
+                    android:text="@string/songs_filter" />
 
                 <View
                     android:layout_width="0dp"
@@ -710,7 +710,7 @@
                     android:id="@+id/searchButton"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:contentDescription="Hľadať"
+                    android:contentDescription="@string/search"
                     android:gravity="center"
                     android:text="🔍"
                     android:textSize="18sp" />
@@ -720,7 +720,7 @@
                 android:id="@+id/search"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="Názov, poznámka, tónina…"
+                android:hint="@string/search_hint"
                 android:imeOptions="actionSearch"
                 android:importantForAutofill="no"
                 android:inputType="text"
@@ -741,7 +741,7 @@
                 android:layout_weight="1"
                 android:gravity="center"
                 android:padding="24dp"
-                android:text="Zatiaľ tu nie sú žiadne riffy.\nNahrajte prvý veľkým červeným tlačidlom."
+                android:text="@string/empty_none"
                 android:visibility="gone" />
         </LinearLayout>
 
@@ -840,7 +840,7 @@
                     android:id="@+id/playerExpand"
                     android:layout_width="44dp"
                     android:layout_height="44dp"
-                    android:contentDescription="Rozbaliť prehrávač"
+                    android:contentDescription="@string/expand_player"
                     android:gravity="center"
                     android:text="⌃"
                     android:textSize="20sp" />
@@ -849,7 +849,7 @@
                     android:id="@+id/playerClose"
                     android:layout_width="40dp"
                     android:layout_height="44dp"
-                    android:contentDescription="Zavrieť prehrávač"
+                    android:contentDescription="@string/close_player"
                     android:gravity="center"
                     android:text="✕"
                     android:textSize="18sp" />
@@ -874,7 +874,7 @@
                         android:layout_height="64dp"
                         android:layout_marginLeft="6dp"
                         android:layout_weight="1"
-                        android:contentDescription="Priebeh nahrávky: ťuknutím skočíte, potiahnutím vyznačíte slučku" />
+                        android:contentDescription="@string/wave_desc" />
 
                     <TextView
                         android:id="@+id/playerTime"
@@ -895,7 +895,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:paddingLeft="8dp"
-                        android:text="Rýchlosť" />
+                        android:text="@string/speed" />
 
                     <Spinner
                         android:id="@+id/speed"
@@ -908,7 +908,7 @@
                         android:id="@+id/loop"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Dookola" />
+                        android:text="@string/repeat" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -929,7 +929,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="40dp"
                         android:background="@drawable/bg_chip"
-                        android:contentDescription="Pridať značku"
+                        android:contentDescription="@string/add_mark"
                         android:gravity="center"
                         android:paddingLeft="12dp"
                         android:paddingRight="12dp"
@@ -960,7 +960,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Začiatok ["
+                        android:text="@string/loop_start"
                         android:textAllCaps="false" />
 
                     <Button
@@ -968,7 +968,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Koniec ]"
+                        android:text="@string/loop_end"
                         android:textAllCaps="false" />
 
                     <Button
@@ -976,7 +976,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Celý"
+                        android:text="@string/loop_all"
                         android:textAllCaps="false" />
                 </LinearLayout>
 
@@ -1011,12 +1011,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
                 android:gravity="center_vertical"
-                android:text="←  Nastavenia"
+                android:text="@string/settings_back"
                 android:textSize="22sp" />
 
             <TextView
                 style="@style/Section"
-                android:text="Vstup" />
+                android:text="@string/input" />
 
             <Spinner
                 android:id="@+id/inputs"
@@ -1046,7 +1046,7 @@
                 <TextView
                     android:layout_width="64dp"
                     android:layout_height="wrap_content"
-                    android:text="Zdroj" />
+                    android:text="@string/source" />
 
                 <Spinner
                     android:id="@+id/source"
@@ -1064,7 +1064,7 @@
                 <TextView
                     android:layout_width="64dp"
                     android:layout_height="wrap_content"
-                    android:text="Formát" />
+                    android:text="@string/format" />
 
                 <Spinner
                     android:id="@+id/format"
@@ -1085,7 +1085,7 @@
                 android:id="@+id/acoustic"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🎸 Akustická gitara cez mikrofón (bez úprav pre hovor, bez dunenia)" />
+                android:text="@string/acoustic" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -1097,7 +1097,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Nájsť nastavenie"
+                    android:text="@string/find_setup"
                     android:textAllCaps="false" />
 
                 <Button
@@ -1105,54 +1105,54 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Popis USB"
+                    android:text="@string/usb_report"
                     android:textAllCaps="false" />
             </LinearLayout>
 
             <TextView
                 style="@style/Section"
-                android:text="Nahrávanie" />
+                android:text="@string/recording_section" />
 
             <CheckBox
                 android:id="@+id/trim"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Orezať ticho na začiatku a konci" />
+                android:text="@string/trim" />
 
             <CheckBox
                 android:id="@+id/normalize"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Zarovnať hlasitosť riffov" />
+                android:text="@string/normalize" />
 
             <CheckBox
                 android:id="@+id/autoRec"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Nahrávať automaticky, keď začnem hrať (a zastaviť po 4 s ticha)" />
+                android:text="@string/auto_rec" />
 
             <CheckBox
                 android:id="@+id/screenOn"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Počas nahrávania nechať zapnutú obrazovku" />
+                android:text="@string/screen_on" />
 
             <CheckBox
                 android:id="@+id/metroPhone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Metronóm a bicie do telefónu (inak do ToneX)" />
+                android:text="@string/metro_phone" />
 
             <Button
                 android:id="@+id/toneTest"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Skúšobný tón do ToneX"
+                android:text="@string/tone_test_btn"
                 android:textAllCaps="false" />
 
             <TextView
                 style="@style/Section"
-                android:text="Vzhľad" />
+                android:text="@string/appearance" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -1163,7 +1163,7 @@
                 <TextView
                     android:layout_width="64dp"
                     android:layout_height="wrap_content"
-                    android:text="Režim" />
+                    android:text="@string/theme" />
 
                 <Spinner
                     android:id="@+id/theme"
@@ -1182,7 +1182,7 @@
                 <TextView
                     android:layout_width="64dp"
                     android:layout_height="wrap_content"
-                    android:text="Farba" />
+                    android:text="@string/color" />
 
                 <Spinner
                     android:id="@+id/accent"
@@ -1192,9 +1192,28 @@
                     android:minHeight="44dp" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="64dp"
+                    android:layout_height="wrap_content"
+                    android:text="@string/language" />
+
+                <Spinner
+                    android:id="@+id/lang"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="44dp" />
+            </LinearLayout>
+
             <TextView
                 style="@style/Section"
-                android:text="Záloha" />
+                android:text="@string/backup_section" />
 
             <TextView
                 android:id="@+id/backupInfo"
@@ -1212,7 +1231,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Zálohovať nové"
+                    android:text="@string/backup_new_btn"
                     android:textAllCaps="false" />
 
                 <Button
@@ -1220,13 +1239,13 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Zálohovať všetko"
+                    android:text="@string/backup_all"
                     android:textAllCaps="false" />
             </LinearLayout>
 
             <TextView
                 style="@style/Section"
-                android:text="Aplikácia" />
+                android:text="@string/app_section" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -1244,14 +1263,14 @@
                     android:id="@+id/manualButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Návod"
+                    android:text="@string/guide"
                     android:textAllCaps="false" />
 
                 <Button
                     android:id="@+id/updates"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Skontrolovať aktualizácie"
+                    android:text="@string/check_updates"
                     android:textAllCaps="false" />
             </LinearLayout>
         </LinearLayout>
@@ -1272,7 +1291,7 @@
             android:layout_height="56dp"
             android:gravity="center_vertical"
             android:paddingLeft="16dp"
-            android:text="←  Návod"
+            android:text="@string/guide_back"
             android:textSize="22sp" />
 
         <WebView

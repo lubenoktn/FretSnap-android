@@ -7,8 +7,8 @@ import android.content.res.TypedArray;
 
 /** Vzhľad (podľa telefónu, tmavý, svetlý) a farba zvýraznenia zvolené v Nastaveniach. */
 final class Look {
-    static final String[] THEMES = {"podľa telefónu", "tmavý", "svetlý"};
-    static final String[] ACCENTS = {"modrá", "zelená", "oranžová", "fialová", "ružová", "podľa tapety"};
+    static String[] THEMES = {"podľa telefónu", "tmavý", "svetlý"};
+    static String[] ACCENTS = {"modrá", "zelená", "oranžová", "fialová", "ružová", "podľa tapety"};
     private static final int[] ACCENT_STYLES = {R.style.Accent_Blue, R.style.Accent_Green, R.style.Accent_Orange,
             R.style.Accent_Purple, R.style.Accent_Pink, 0};
 
