@@ -139,7 +139,7 @@ public class MainActivity extends Activity {
     SeekBar gainBar;
     ProgressBar playerProgress;
     Spinner inputs, sourceSpin, formatSpin, channelSpin, speed;
-    CheckBox trim, screenOn, metroPhone, loop, normalize, playDrums, autoRec;
+    CheckBox trim, screenOn, metroPhone, loop, normalize, playDrums, autoRec, acoustic;
     /** Automatické nahrávanie: zapnuté, nahrávka spustená ním, ako dlho je hlasno / ticho (ms). */
     volatile boolean autoOn, autoStarted;
     long loudMs, quietMs;
@@ -363,6 +363,11 @@ public class MainActivity extends Activity {
         normalize.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("normalize", on).apply());
         trim.setChecked(prefs.getBoolean("trim", true));
         trim.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("trim", on).apply());
+        acoustic.setChecked(prefs.getBoolean("acoustic", false));
+        acoustic.setOnCheckedChangeListener((b, on) -> {
+            prefs.edit().putBoolean("acoustic", on).apply();
+            startMonitor();
+        });
         metroPhone.setChecked(prefs.getBoolean("metroPhone", false));
         metroPhone.setOnCheckedChangeListener((b, on) -> {
             prefs.edit().putBoolean("metroPhone", on).apply();
@@ -558,6 +563,7 @@ public class MainActivity extends Activity {
         trim = findViewById(R.id.trim);
         screenOn = findViewById(R.id.screenOn);
         metroPhone = findViewById(R.id.metroPhone);
+        acoustic = findViewById(R.id.acoustic);
         normalize = findViewById(R.id.normalize);
         diaryText = findViewById(R.id.diaryText);
         filterRow = findViewById(R.id.filterRow);
@@ -1000,9 +1006,18 @@ public class MainActivity extends Activity {
         int source, encoding;
         short[] shorts;
         float[] floats;
+        /** Akustická gitara: filter dunenia (null = bez filtra) a vypnuté úpravy zvuku pre hovor. */
+        HighPass highPass;
+        final List<android.media.audiofx.AudioEffect> effects = new ArrayList<>();
 
         @Override
         int read(int[] out) {
+            int n = readRaw(out);
+            if (n > 0 && highPass != null) highPass.process(out, n);
+            return n;
+        }
+
+        private int readRaw(int[] out) {
             float g = gain;
             if (encoding != AudioFormat.ENCODING_PCM_FLOAT) {
                 if (shorts == null || shorts.length < out.length) shorts = new short[out.length];
@@ -1016,12 +1031,31 @@ public class MainActivity extends Activity {
             return n;
         }
 
+        /** Vypne potlačenie šumu, automatickú hlasitosť a potlačenie ozveny, ak ich telefón zapína. */
+        void acoustic() {
+            highPass = new HighPass(60, rate, channels);
+            int id = ar.getAudioSessionId();
+            try {
+                if (android.media.audiofx.NoiseSuppressor.isAvailable()) off(android.media.audiofx.NoiseSuppressor.create(id));
+                if (android.media.audiofx.AutomaticGainControl.isAvailable()) off(android.media.audiofx.AutomaticGainControl.create(id));
+                if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) off(android.media.audiofx.AcousticEchoCanceler.create(id));
+            } catch (RuntimeException ignored) {
+            }
+        }
+
+        private void off(android.media.audiofx.AudioEffect e) {
+            if (e == null) return;
+            e.setEnabled(false);
+            effects.add(e);
+        }
+
         @Override
         void close() {
             try {
                 ar.stop();
             } catch (Exception ignored) {
             }
+            for (android.media.audiofx.AudioEffect e : effects) e.release();
             ar.release();
         }
     }
@@ -1062,9 +1096,14 @@ public class MainActivity extends Activity {
     }
 
     /** Pri automatickom zdroji skúša zdroje po rade, kým Android nepripojí naozaj zvolený vstup. */
-    Capture openChosen(AudioDeviceInfo dev, int source, int encoding, int channels, int rate) {
+    Capture openChosen(AudioDeviceInfo dev, int source, int encoding, int channels, int rate, boolean acoustic) {
         boolean raw = "true".equals(audio.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED));
+        // Akustická gitara: zdroje, na ktorých telefón zvuk neupravuje ako pri hovore.
         int[] sources = source != AUTO ? new int[]{source}
+                : acoustic ? raw ? new int[]{MediaRecorder.AudioSource.UNPROCESSED,
+                MediaRecorder.AudioSource.VOICE_PERFORMANCE, MediaRecorder.AudioSource.MIC}
+                : new int[]{MediaRecorder.AudioSource.VOICE_PERFORMANCE, MediaRecorder.AudioSource.MIC,
+                MediaRecorder.AudioSource.CAMCORDER}
                 : raw ? new int[]{MediaRecorder.AudioSource.UNPROCESSED, MediaRecorder.AudioSource.MIC,
                 MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.CAMCORDER}
                 : new int[]{MediaRecorder.AudioSource.MIC, MediaRecorder.AudioSource.VOICE_RECOGNITION,
@@ -1110,17 +1149,19 @@ public class MainActivity extends Activity {
         int encoding = FORMAT_IDS[formatSpin.getSelectedItemPosition()];
         int channels = channelsFor(dev, CHANNEL_IDS[channelSpin.getSelectedItemPosition()]);
         int rate = rateFor(dev);
+        boolean acoustic = this.acoustic.isChecked();
         return attempt -> {
-            Capture c = openChosen(dev, source, encoding, channels, rate);
+            Capture c = openChosen(dev, source, encoding, channels, rate, acoustic);
             if (c == null) throw new IOException("S týmto nastavením sa vstup nedá otvoriť.");
-            c.where = describe(c, dev);
+            if (acoustic) c.acoustic();
+            c.where = describe(c, dev) + (acoustic ? "\nAkustická gitara: bez úprav pre hovor, filter dunenia pod 60 Hz" : "");
             return c;
         };
     }
 
     String settingsKey() {
         return inputKey() + "/" + sourceSpin.getSelectedItemPosition() + "/" + formatSpin.getSelectedItemPosition()
-                + "/" + channelSpin.getSelectedItemPosition();
+                + "/" + channelSpin.getSelectedItemPosition() + "/" + acoustic.isChecked();
     }
 
     /** Spustí stále čítanie vstupu (ak už beží s rovnakým nastavením, nič nemení). */
@@ -1398,8 +1439,28 @@ public class MainActivity extends Activity {
             notice("Vstup sa ešte spúšťa, skúste o chvíľu.", null, null);
             return;
         }
+        boolean sounds = DRUMS.running() && !DRUMS.following()
+                && (DRUMS.mode != Drums.OFF || DRUMS.backing != null || LOOPER.hasLoop());
+        if (sounds && !warnedBleed && speakerBleed()) {
+            warnedBleed = true;
+            notice("Bicie hrajú z reproduktora a mikrofón ich nahrá tiež. Na nahrávanie s bicími použite "
+                    + "slúchadlá do kábla.", "Rozumiem", null);
+        }
         if (leadBars() > 0) startCountIn();
         else beginRecording(false);
+    }
+
+    /** Upozornenie na bicie z reproduktora ukáže len raz, kým aplikácia beží. */
+    static boolean warnedBleed;
+
+    /** Nahráva sa vstavaným mikrofónom a bicie (sprievod, slučka) idú z reproduktora telefónu. */
+    boolean speakerBleed() {
+        if (selectedUsb() != null) return false;
+        AudioDeviceInfo in = selected();
+        if (in != null && in.getType() != AudioDeviceInfo.TYPE_BUILTIN_MIC) return false;
+        if (!metroPhone.isChecked() && Output.Usb.available()) return false;
+        AudioDeviceInfo out = metronomeDevice();
+        return out == null || out.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER;
     }
 
     static final int LEAD_IN = 4;

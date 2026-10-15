@@ -1081,6 +1081,12 @@
                     android:minHeight="44dp" />
             </LinearLayout>
 
+            <CheckBox
+                android:id="@+id/acoustic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🎸 Akustická gitara cez mikrofón (bez úprav pre hovor, bez dunenia)" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
