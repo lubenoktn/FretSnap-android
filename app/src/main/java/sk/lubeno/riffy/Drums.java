@@ -279,7 +279,7 @@ final class Drums {
             Bar b = barFor(bar);
             for (int i = 0; i < STICK; i++) {
                 float v = b.hits[i][step];
-                if (i == CRASH && step == 0 && bar >= 0 && (bar == 0 || (fillBars > 0 && bar % fillBars == 0))) {
+                if (i == CRASH && step == 0 && bar > 0 && fillBars > 0 && bar % fillBars == 0) {
                     v = Math.max(v, 0.9f);
                 }
                 if (v > 0) play(i, v);
