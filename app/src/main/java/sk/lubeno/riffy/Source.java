@@ -32,7 +32,8 @@ abstract class Source {
     }
 
     interface Opener {
-        Source open() throws IOException;
+        /** attempt: koľký pokus o otvorenie (0 = prvý); pri opakovaní môže vstup skúsiť iný postup. */
+        Source open(int attempt) throws IOException;
     }
 
     static int clamp(double v) {

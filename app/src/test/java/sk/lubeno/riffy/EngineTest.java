@@ -42,9 +42,15 @@ public class EngineTest {
     public void tichyVstupSaOtvoriZnova() throws Exception {
         Engine e = new Engine();
         AtomicInteger opens = new AtomicInteger();
-        e.start("a", () -> new Fake(opens.incrementAndGet() == 1));
+        java.util.List<Integer> attempts = new java.util.ArrayList<>();
+        e.start("a", attempt -> {
+            attempts.add(attempt);
+            return new Fake(opens.incrementAndGet() == 1);
+        });
         Thread.sleep(Source.SETTLE_MS + 2500);
         assertEquals(2, opens.get());
+        // Druhý pokus vie, že je druhý (USB vstup pri ňom skúsi iné hodiny).
+        assertEquals(java.util.Arrays.asList(0, 1), attempts);
         assertTrue(e.running());
         java.io.File f = java.io.File.createTempFile("spatne", ".wav");
         Engine.Recorded r = e.saveHistory(f, 30);
@@ -56,7 +62,7 @@ public class EngineTest {
     public void ziveZariadenieSaNeotvaraZnova() throws Exception {
         Engine e = new Engine();
         AtomicInteger opens = new AtomicInteger();
-        e.start("a", () -> new Fake(false) {
+        e.start("a", attempt -> new Fake(false) {
             { opens.incrementAndGet(); }
         });
         Thread.sleep(Source.SETTLE_MS + 1500);

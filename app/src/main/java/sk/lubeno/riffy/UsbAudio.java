@@ -382,8 +382,11 @@ public class UsbAudio {
         if (info.uac == 2) {
             for (int clock : info.clocks) {
                 int now = readClock(conn, info, clock);
-                if (want > 0 && now != want) {
-                    conn.controlTransfer(0x21, 0x01, 0x0100, clock << 8 | info.controlIface, le(want, 4), 4, 500);
+                // Hodiny sa nastavia vždy, aj na tú istú hodnotu: ToneX Plug po zapojení bez tohto
+                // pokynu prenos nespustí (posiela len ticho).
+                int set = want > 0 ? want : now;
+                if (set > 0) {
+                    conn.controlTransfer(0x21, 0x01, 0x0100, clock << 8 | info.controlIface, le(set, 4), 4, 500);
                     now = readClock(conn, info, clock);
                 }
                 if (now > 0) return now;
@@ -402,6 +405,18 @@ public class UsbAudio {
      */
     static Source open(UsbManager um, UsbDevice d) throws IOException {
         return open(um, d, 0);
+    }
+
+    /**
+     * Hodiny pri pokuse o otvorenie: najprv vlastné vzorkovanie zariadenia, ak by z neho nič nešlo,
+     * ešte 48 a 44,1 kHz (tak ho prebudil aj skúšobný prenos v popise USB).
+     */
+    static int wantFor(int attempt) {
+        switch (attempt) {
+            case 1: return 48000;
+            case 2: return 44100;
+            default: return 0;
+        }
     }
 
     static Source open(UsbManager um, UsbDevice d, int want) throws IOException {
@@ -439,6 +454,8 @@ public class UsbAudio {
                     log.append("zariadenie neprijalo nastavenie\n");
                     continue;
                 }
+                // Linux nastavuje hodiny aj po výbere rozhrania; niektoré zariadenia až potom začnú posielať.
+                if (info.uac == 2) rate = setRate(conn, info, alt, want > 0 ? want : rate);
                 try { Thread.sleep(50); } catch (InterruptedException ignored) { }
 
                 int base = alt.maxPacket & 0x7ff;

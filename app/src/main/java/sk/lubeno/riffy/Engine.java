@@ -112,7 +112,7 @@ final class Engine {
 
     private void loop(Source.Opener opener) {
         for (int attempt = 0; ; attempt++) {
-            if (!runOnce(opener, attempt < RETRIES)) break;
+            if (!runOnce(opener, attempt, attempt < RETRIES)) break;
             Listener l = listener;
             if (l != null) l.onStatus("Zariadenie sa ešte zapína, skúšam ho otvoriť znova…");
             try {
@@ -130,10 +130,10 @@ final class Engine {
      * Otvorí vstup a číta, kým sa nemá skončiť. Vráti true, ak treba vstup otvoriť znova:
      * zariadenie po zapojení ešte nebolo pripravené a posiela len nuly (smie len mimo nahrávania).
      */
-    private boolean runOnce(Source.Opener opener, boolean mayRetry) {
+    private boolean runOnce(Source.Opener opener, int attempt, boolean mayRetry) {
         Source c;
         try {
-            c = opener.open();
+            c = opener.open(attempt);
         } catch (Exception e) {
             synchronized (this) {
                 if (thread == Thread.currentThread()) running = false;

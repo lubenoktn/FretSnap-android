@@ -708,14 +708,14 @@ public class MainActivity extends Activity {
                 }
                 return null;
             }
-            return () -> UsbAudio.open(usb, u);
+            return attempt -> UsbAudio.open(usb, u, UsbAudio.wantFor(attempt));
         }
         AudioDeviceInfo dev = selected();
         int source = SOURCE_IDS[sourceSpin.getSelectedItemPosition()];
         int encoding = FORMAT_IDS[formatSpin.getSelectedItemPosition()];
         int channels = channelsFor(dev, CHANNEL_IDS[channelSpin.getSelectedItemPosition()]);
         int rate = rateFor(dev);
-        return () -> {
+        return attempt -> {
             Capture c = openChosen(dev, source, encoding, channels, rate);
             if (c == null) throw new IOException("S týmto nastavením sa vstup nedá otvoriť.");
             c.where = describe(c, dev);
