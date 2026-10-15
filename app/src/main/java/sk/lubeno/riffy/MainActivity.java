@@ -99,7 +99,7 @@ import java.util.zip.ZipOutputStream;
 public class MainActivity extends Activity {
     static final String FOLDER = Environment.DIRECTORY_MUSIC + "/Riffy/";
     static final String SHARED = FOLDER + "Zdieľané/";
-    static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2;
+    static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2, ASK_RENAME = 3;
     static final Metronome METRONOME = new Metronome();
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
     static final Object COUNT_IN = new Object();
@@ -1966,19 +1966,51 @@ public class MainActivity extends Activity {
                 .setView(field)
                 .setPositiveButton("Uložiť", (d, w) -> {
                     String name = field.getText().toString().trim().replaceAll("[/\\\\:]", "-");
-                    if (name.isEmpty()) return;
-                    ContentValues v = new ContentValues();
-                    v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".wav");
-                    try {
-                        getContentResolver().update(r.uri(), v, null, null);
-                        meta.rename(r.name, name);
-                    } catch (Exception e) {
-                        notice("Túto nahrávku sa nedá premenovať.", null, null);
+                    if (name.isEmpty() || name.equals(r.name)) return;
+                    for (Riff o : riffs) {
+                        if (o != r && o.name.equalsIgnoreCase(name)) {
+                            notice("Riff s menom „" + name + "“ už existuje.", null, null);
+                            return;
+                        }
                     }
-                    loadRiffs();
+                    renameTo(r, name, true);
                 })
                 .setNegativeButton("Zrušiť", null)
                 .show();
+    }
+
+    /** Riff a meno, ktoré čakajú na súhlas Androidu so zmenou súboru. */
+    Riff renaming;
+    String renamingTo;
+
+    /**
+     * Nahrávky z predošlej inštalácie aplikácie Android považuje za cudzie; zmeniť ich
+     * smie aplikácia až po súhlase, o ktorý si raz povie (ask).
+     */
+    void renameTo(Riff r, String name, boolean ask) {
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".wav");
+        try {
+            getContentResolver().update(r.uri(), v, null, null);
+            meta.rename(r.name, name);
+            r.name = name;
+            saveMeta(r);
+        } catch (SecurityException e) {
+            if (ask && Build.VERSION.SDK_INT >= 30) {
+                try {
+                    renaming = r;
+                    renamingTo = name;
+                    startIntentSenderForResult(MediaStore.createWriteRequest(getContentResolver(),
+                            java.util.Collections.singletonList(r.uri())).getIntentSender(), ASK_RENAME, null, 0, 0, 0);
+                    return;
+                } catch (Exception ignored) {
+                }
+            }
+            notice("Android nedovolil nahrávku premenovať.", null, null);
+        } catch (Exception e) {
+            notice("Túto nahrávku sa nedá premenovať: " + e.getMessage(), null, null);
+        }
+        loadRiffs();
     }
 
     void share(Uri uri, String type, String title) {
@@ -2389,5 +2421,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
         if (code == ASK_DELETE) loadRiffs();
+        if (code == ASK_RENAME && renaming != null) {
+            Riff r = renaming;
+            renaming = null;
+            if (result == RESULT_OK) renameTo(r, renamingTo, false);
+        }
     }
 }
