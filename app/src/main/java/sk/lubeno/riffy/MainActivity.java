@@ -1420,27 +1420,38 @@ public class MainActivity extends Activity {
         DRUMS.bpm = bpm;
         int lead = leadBars();
         DRUMS.start(this, output(), wasOn ? DRUMS.mode : Drums.CLICK, lead);
+        // Metronóm, ktorý hrá len na odpočet, na prvej dobe už necvakne (mikrofón by ho nahral).
+        if (!wasOn) DRUMS.silentFromStart();
         int bar = DRUMS.beatsPerBar(), beats = bar * lead;
-        double beatMs = 60000.0 / bpm;
-        long now = SystemClock.uptimeMillis();
         banner.setVisibility(View.VISIBLE);
         banner.setBackgroundTintList(ColorStateList.valueOf(ORANGE));
-        for (int k = 0; k < beats; k++) {
-            int left = beats - k, b = k / bar + 1;
-            boolean last = left <= bar;
-            if (!last && k % bar != 0) continue;
-            ui.postAtTime(() -> {
-                rec.setText(last ? String.valueOf(left) : "♪");
-                banner.setText((last ? "Odpočet " + left : "Rozbeh – takt " + b + " z " + (lead - 1))
-                        + "   (ťuknutím zrušíte)");
-            }, COUNT_IN, now + Math.round(k * beatMs));
-        }
-        ui.postAtTime(() -> {
+        // Poistka: keby výstup nehlásil, čo už zaznelo, začne sa nahrávať chvíľu po odpočte.
+        long deadline = SystemClock.uptimeMillis() + Math.round(beats * 60000.0 / bpm) + 1000;
+        countTick(lead, bar, beats, wasOn, Integer.MIN_VALUE, deadline);
+    }
+
+    /**
+     * Ukazuje odpočet podľa toho, čo je práve počuť (výstup má oneskorenie), a nahrávať začne,
+     * až keď zaznie prvá doba – inak by mikrofón nahral aj posledný úder odpočtu.
+     */
+    void countTick(int lead, int bar, int beats, boolean wasOn, int shown, long deadline) {
+        double heard = DRUMS.audibleBeat();
+        int k = Double.isNaN(heard) ? shown == Integer.MIN_VALUE ? -beats : shown : (int) Math.floor(heard + 1e-6);
+        if (k >= 0 || SystemClock.uptimeMillis() > deadline) {
             counting = false;
             if (!wasOn) rhythmOff();
             showTools();
             beginRecording(true);
-        }, COUNT_IN, now + Math.round(beats * beatMs));
+            return;
+        }
+        if (k != shown) {
+            int left = -k, b = (k + beats) / bar + 1;
+            boolean last = left <= bar;
+            rec.setText(last ? String.valueOf(left) : "♪");
+            banner.setText((last ? "Odpočet " + left : "Rozbeh – takt " + b + " z " + (lead - 1))
+                    + "   (ťuknutím zrušíte)");
+        }
+        ui.postAtTime(() -> countTick(lead, bar, beats, wasOn, k, deadline), COUNT_IN, SystemClock.uptimeMillis() + 10);
     }
 
     void cancelCountIn() {

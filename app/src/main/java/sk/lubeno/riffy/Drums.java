@@ -201,6 +201,8 @@ final class Drums {
         /** Poloha v dobách (0 = prvá doba prvého taktu; záporné = odpočet). */
         double beat;
         boolean countIn;
+        /** Od prvej doby už nič nehrá (metronóm len na odpočet). */
+        volatile boolean silentFromStart;
         private long next;
         private int lastStyle = -1, lastMode = -1;
         private final short[][] voice = new short[24][];
@@ -270,6 +272,7 @@ final class Drums {
                 }
                 return;
             }
+            if (bar >= 0 && silentFromStart) return;
             Backing bk = backing;
             if (mode == OFF || mode == CLICK) {
                 // Pri rozbehu cvaká metronóm tichšie, aby odpočet v poslednom takte vynikol.
@@ -403,6 +406,12 @@ final class Drums {
     /** Hrá samo (metronóm, bicie alebo len slučka); s odpočtom jedného taktu pred prvou dobou. */
     void start(Context c, Output out, int mode, boolean countIn) {
         start(c, out, mode, countIn ? 1 : 0);
+    }
+
+    /** Po odpočte už nič nezaznie, ani to, čo je už vo výstupe pripravené dopredu. */
+    void silentFromStart() {
+        Sequencer s = seq;
+        if (s != null) s.silentFromStart = true;
     }
 
     /** leadBars: koľko taktov pred prvou dobou (0 = hneď, 1 = odpočet, viac = rozbeh a odpočet). */
