@@ -1,6 +1,9 @@
 package sk.lubeno.riffy;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
@@ -15,6 +18,7 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.GradientDrawable;
 import android.database.Cursor;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
@@ -111,12 +115,20 @@ public class MainActivity extends Activity {
 
     View mainPage, settingsPage, listArea, tools, spacer, tunerPanel, playerPanel, playerMore, notice;
     TextView chip, banner, levelText, gainText, recHint, metroChip, countChip, filterAll, filterFav, empty;
-    TextView tunerNote, tunerText, playerTitle, playerInfo, playerTime, loopText, playPause, playerExpand;
+    TextView recClock, tunerText, playerTitle, playerInfo, playerTime, loopText, playPause, playerExpand;
     TextView noticeText, noticeAction, status, info, diaryText, selectCount;
     View filterRow, selectBar;
     Button rec, retro, tunerButton, test, usbInfo;
     LevelView level;
-    SeekBar gainBar, tunerCents, playerSeek;
+    LiveWaveView live;
+    TunerView tunerView;
+    WaveView playerWave;
+    ObjectAnimator pulse;
+    ValueAnimator glow;
+    GradientDrawable border;
+    BroadcastReceiver onPlug;
+    AudioDeviceCallback onDevices;
+    SeekBar gainBar;
     ProgressBar playerProgress;
     Spinner inputs, sourceSpin, formatSpin, channelSpin, speed;
     CheckBox trim, screenOn, metroPhone, loop, normalize;
@@ -146,7 +158,6 @@ public class MainActivity extends Activity {
     long playing = -1;
     /** Slučka v ms; -1 = od začiatku / do konca. */
     int loopStart = -1, loopEnd = -1;
-    boolean seeking;
     static final float[] SPEEDS = {0.5f, 0.6f, 0.75f, 0.9f, 1f, 1.25f};
     static final String[] SPEED_NAMES = {"50 %", "60 %", "75 %", "90 %", "100 %", "125 %"};
     final Runnable progress = this::showProgress;
@@ -210,6 +221,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle saved) {
+        prefs = getSharedPreferences("nastavenia", MODE_PRIVATE);
+        Look.apply(this, prefs);
         super.onCreate(saved);
         setContentView(R.layout.main);
         View root = findViewById(R.id.root);
@@ -221,7 +234,6 @@ public class MainActivity extends Activity {
 
         audio = getSystemService(AudioManager.class);
         usb = getSystemService(UsbManager.class);
-        prefs = getSharedPreferences("nastavenia", MODE_PRIVATE);
         meta = new Meta(this);
         UsbAudio.load();
         findViews();
@@ -295,6 +307,8 @@ public class MainActivity extends Activity {
         });
         test.setOnClickListener(v -> findSetup());
         usbInfo.setOnClickListener(v -> usbReport());
+        lookChoice(R.id.theme, Look.THEMES, "theme");
+        lookChoice(R.id.accent, Look.ACCENTS, "accent");
         ((TextView) findViewById(R.id.version)).setText("Verzia " + Updates.current(this));
         findViewById(R.id.updates).setOnClickListener(v -> Updates.check(this, prefs, false));
         Updates.check(this, prefs, true);
@@ -303,7 +317,7 @@ public class MainActivity extends Activity {
         // Vstupy
         IntentFilter plugs = new IntentFilter(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         plugs.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        BroadcastReceiver onPlug = new BroadcastReceiver() {
+        onPlug = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent i) {
                 if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(i.getAction())) deviceAttached();
@@ -325,7 +339,7 @@ public class MainActivity extends Activity {
                 showInfo();
             }
         });
-        audio.registerAudioDeviceCallback(new AudioDeviceCallback() {
+        onDevices = new AudioDeviceCallback() {
             public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
                 refreshInputs();
             }
@@ -333,7 +347,8 @@ public class MainActivity extends Activity {
             public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) {
                 refreshInputs();
             }
-        }, ui);
+        };
+        audio.registerAudioDeviceCallback(onDevices, ui);
 
         // Zoznam riffov
         adapter = new RiffAdapter();
@@ -390,6 +405,13 @@ public class MainActivity extends Activity {
         askPermissions();
         loadRiffs();
         if (!engine.recording()) IO.execute(this::recover);
+        if (saved != null && saved.getBoolean("settings")) showSettings(true);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        super.onSaveInstanceState(out);
+        out.putBoolean("settings", settingsPage.getVisibility() == View.VISIBLE);
     }
 
     void findViews() {
@@ -398,6 +420,8 @@ public class MainActivity extends Activity {
         chip = findViewById(R.id.chip);
         banner = findViewById(R.id.banner);
         level = findViewById(R.id.level);
+        live = findViewById(R.id.live);
+        recClock = findViewById(R.id.recClock);
         levelText = findViewById(R.id.levelText);
         gainText = findViewById(R.id.gainText);
         gainBar = findViewById(R.id.gain);
@@ -409,9 +433,8 @@ public class MainActivity extends Activity {
         metroChip = findViewById(R.id.metroChip);
         countChip = findViewById(R.id.countChip);
         tunerPanel = findViewById(R.id.tunerPanel);
-        tunerNote = findViewById(R.id.tunerNote);
+        tunerView = findViewById(R.id.tunerView);
         tunerText = findViewById(R.id.tunerText);
-        tunerCents = findViewById(R.id.tunerCents);
         listArea = findViewById(R.id.listArea);
         spacer = findViewById(R.id.spacer);
         filterAll = findViewById(R.id.filterAll);
@@ -429,7 +452,7 @@ public class MainActivity extends Activity {
         playerProgress = findViewById(R.id.playerProgress);
         playerInfo = findViewById(R.id.playerInfo);
         playerExpand = findViewById(R.id.playerExpand);
-        playerSeek = findViewById(R.id.playerSeek);
+        playerWave = findViewById(R.id.playerWave);
         playerTime = findViewById(R.id.playerTime);
         speed = findViewById(R.id.speed);
         loop = findViewById(R.id.loop);
@@ -485,6 +508,7 @@ public class MainActivity extends Activity {
             engine.stop();
             if (!counting) METRONOME.stop();
             level.clear();
+            live.clear();
             levelText.setText("");
             setChip(GRAY, "Vstup vypnutý");
         }
@@ -500,6 +524,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         stopPlaying();
+        stopPulse();
+        // Pri zmene vzhľadu sa okno vytvára znova; staré by inak ďalej počúvalo zapojenie USB.
+        unregisterReceiver(onPlug);
+        audio.unregisterAudioDeviceCallback(onDevices);
         super.onDestroy();
     }
 
@@ -562,6 +590,7 @@ public class MainActivity extends Activity {
         banner.setVisibility(recording ? View.VISIBLE : View.GONE);
         banner.setBackgroundTintList(ColorStateList.valueOf(RED));
         recHint.setVisibility(recording ? View.VISIBLE : View.GONE);
+        recClock.setVisibility(recording ? View.VISIBLE : View.GONE);
         retro.setVisibility(recording ? View.INVISIBLE : View.VISIBLE);
         tunerButton.setVisibility(recording ? View.INVISIBLE : View.VISIBLE);
         tools.setVisibility(recording ? View.GONE : View.VISIBLE);
@@ -571,9 +600,44 @@ public class MainActivity extends Activity {
         if (recording) stopPlaying();
         rec.setText(recording ? "■" : "●");
         rec.setContentDescription(recording ? "Zastaviť a uložiť" : "Nahrávať");
+        if (recording) startPulse();
+        else stopPulse();
         inputs.setEnabled(!recording);
         usbInfo.setEnabled(!recording);
         test.setEnabled(!recording && selectedUsb() == null);
+    }
+
+    /** Počas nahrávania tlačidlo pulzuje a okraj obrazovky svieti na červeno, aby to bolo vidno aj z diaľky. */
+    void startPulse() {
+        if (pulse != null) return;
+        pulse = ObjectAnimator.ofPropertyValuesHolder(rec, PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 0.92f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 0.92f));
+        pulse.setDuration(700);
+        pulse.setRepeatCount(ValueAnimator.INFINITE);
+        pulse.setRepeatMode(ValueAnimator.REVERSE);
+        pulse.start();
+        if (border == null) {
+            border = new GradientDrawable();
+            border.setStroke(Math.round(5 * getResources().getDisplayMetrics().density), RED);
+            border.setCornerRadius(18 * getResources().getDisplayMetrics().density);
+        }
+        findViewById(R.id.root).setForeground(border);
+        glow = ValueAnimator.ofInt(90, 255);
+        glow.setDuration(700);
+        glow.setRepeatCount(ValueAnimator.INFINITE);
+        glow.setRepeatMode(ValueAnimator.REVERSE);
+        glow.addUpdateListener(a -> border.setAlpha((int) a.getAnimatedValue()));
+        glow.start();
+    }
+
+    void stopPulse() {
+        if (pulse != null) pulse.cancel();
+        if (glow != null) glow.cancel();
+        pulse = null;
+        glow = null;
+        rec.setScaleX(1);
+        rec.setScaleY(1);
+        findViewById(R.id.root).setForeground(null);
     }
 
     /** Počas nahrávania obrazovka nezhasne (ak to používateľ nevypol); nahrávanie by bežalo aj pri zhasnutej. */
@@ -735,6 +799,25 @@ public class MainActivity extends Activity {
             }
         });
         return s;
+    }
+
+    /** Voľba vzhľadu: po zmene sa okno nakreslí znova v nových farbách. */
+    void lookChoice(int id, String[] names, String key) {
+        Spinner s = findViewById(id);
+        ArrayAdapter<String> a = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, names);
+        a.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        s.setAdapter(a);
+        s.setSelection(Math.max(0, Math.min(prefs.getInt(key, 0), names.length - 1)));
+        s.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
+                if (pos == prefs.getInt(key, 0)) return;
+                prefs.edit().putInt(key, pos).apply();
+                recreate();
+            }
+
+            public void onNothingSelected(AdapterView<?> p) {
+            }
+        });
     }
 
     static int indexOf(int[] values, int v) {
@@ -927,6 +1010,7 @@ public class MainActivity extends Activity {
         String text = Source.levels(peak) + (max >= 32700 ? "   ⚠ prebudené, uberte" : "");
         ui.post(() -> {
             level.set(top);
+            live.push(top, engine.recording());
             levelText.setText(text);
             heard(top);
         });
@@ -1073,7 +1157,8 @@ public class MainActivity extends Activity {
 
     void tick() {
         if (!engine.recording()) return;
-        banner.setText("●  Nahrávam   " + clock(System.currentTimeMillis() - engine.recordingSince()));
+        banner.setText("●  Nahrávam");
+        recClock.setText(clock(System.currentTimeMillis() - engine.recordingSince()));
         ui.postDelayed(this::tick, 250);
     }
 
@@ -1516,9 +1601,22 @@ public class MainActivity extends Activity {
             boolean selecting = !selection.isEmpty(), chosen = selection.contains(r.id);
             menu.setVisibility(selecting ? View.INVISIBLE : View.VISIBLE);
             if (selecting) ((TextView) v.findViewById(R.id.rowPlay)).setText(chosen ? "☑" : "☐");
-            v.setBackgroundColor(chosen ? 0x331E88E5 : 0);
+            v.setBackgroundColor(chosen ? Look.alpha(Look.accent(MainActivity.this), 0x33) : 0);
+            ((WaveView) v.findViewById(R.id.rowWave)).setPeaks(wave(r));
             return v;
         }
+    }
+
+    /** Náhľad priebehu riffu; kým sa počíta, null (zoznam sa potom prekreslí). */
+    byte[] wave(Riff r) {
+        return Waves.get(getCacheDir(), r.id + "_" + r.duration, () -> {
+            android.os.ParcelFileDescriptor fd = getContentResolver().openFileDescriptor(r.uri(), "r");
+            if (fd == null) throw new IOException("Súbor sa nedá otvoriť.");
+            return new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd);
+        }, () -> ui.post(() -> {
+            if (adapter != null) adapter.notifyDataSetChanged();
+            if (playing == r.id) playerWave.setPeaks(wave(r));
+        }));
     }
 
     /** Dĺžka v ms podľa hlavičky WAV a veľkosti súboru. */
@@ -1565,18 +1663,28 @@ public class MainActivity extends Activity {
         findViewById(R.id.playerClose).setOnClickListener(v -> stopPlaying());
         playerExpand.setOnClickListener(v -> expandPlayer(playerMore.getVisibility() != View.VISIBLE));
         findViewById(R.id.playerMain).setOnClickListener(v -> expandPlayer(playerMore.getVisibility() != View.VISIBLE));
-        playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar b, int value, boolean user) {
-                if (user) playerTime.setText(time(value, 0) + " / " + time(b.getMax(), 0));
+        playerWave.setListener(new WaveView.Listener() {
+            public void onSeek(float at) {
+                if (player == null) return;
+                int pos = Math.round(at * player.getDuration());
+                // Ťuknutie mimo slučky ju zruší, inak by prehrávanie hneď skočilo späť.
+                if ((loopStart >= 0 && pos < loopStart) || (loopEnd >= 0 && pos > loopEnd)) {
+                    loopStart = loopEnd = -1;
+                    showLoop();
+                }
+                player.seekTo(pos);
+                showProgress();
             }
 
-            public void onStartTrackingTouch(SeekBar b) {
-                seeking = true;
-            }
-
-            public void onStopTrackingTouch(SeekBar b) {
-                seeking = false;
-                if (player != null) player.seekTo(b.getProgress());
+            public void onSelect(float from, float to) {
+                if (player == null) return;
+                int dur = player.getDuration();
+                loopStart = Math.round(from * dur);
+                loopEnd = to >= 0.995f ? -1 : Math.round(to * dur);
+                loop.setChecked(true);
+                player.seekTo(loopStart);
+                if (!player.isPlaying()) resume();
+                showLoop();
             }
         });
         findViewById(R.id.loopA).setOnClickListener(v -> {
@@ -1642,8 +1750,8 @@ public class MainActivity extends Activity {
             playing = r.id;
             loopStart = loopEnd = -1;
             playerTitle.setText(label(r.name));
-            playerSeek.setMax(player.getDuration());
             playerProgress.setMax(player.getDuration());
+            playerWave.setPeaks(wave(r));
             playerPanel.setVisibility(View.VISIBLE);
             showLoop();
             showPlayerInfo();
@@ -1698,15 +1806,16 @@ public class MainActivity extends Activity {
             pos = player.getCurrentPosition();
         }
         playerProgress.setProgress(pos);
-        if (!seeking) {
-            playerSeek.setProgress(pos);
-            playerTime.setText(time(pos, 0) + " / " + time(dur, 0));
-        }
+        playerWave.setPosition(dur > 0 ? pos / (float) dur : -1);
+        playerTime.setText(time(pos, 0) + " / " + time(dur, 0));
         if (player.isPlaying()) ui.postDelayed(progress, 50);
     }
 
     void showLoop() {
-        loopText.setText(loopStart < 0 && loopEnd < 0 ? "Slučka: celá nahrávka"
+        int dur = player == null ? 0 : player.getDuration();
+        playerWave.setLoop(dur <= 0 || loopStart < 0 ? -1 : loopStart / (float) dur,
+                dur <= 0 || loopEnd < 0 ? -1 : loopEnd / (float) dur);
+        loopText.setText(loopStart < 0 && loopEnd < 0 ? "Slučka: celá nahrávka · potiahnutím po vlnke vyznačíte časť"
                 : "Slučka: " + time(Math.max(0, loopStart), 1) + " – "
                 + (loopEnd < 0 ? "koniec" : time(loopEnd, 1)));
     }
@@ -1761,14 +1870,12 @@ public class MainActivity extends Activity {
         tunerOn = on;
         showTools();
         tunerPanel.setVisibility(on ? View.VISIBLE : View.GONE);
-        tunerNote.setText("—");
-        tunerNote.setTextColor(0xFF808080);
+        tunerView.clear();
         if (!on) {
             engine.tuner = null;
             return;
         }
         tunerText.setText("Zahrajte jednu strunu.");
-        tunerCents.setProgress(50);
         Tuner t = new Tuner();
         long[] lastSeen = {0};
         t.listener = p -> ui.post(() -> {
@@ -1777,20 +1884,16 @@ public class MainActivity extends Activity {
             if (p == null) {
                 // Krátke výpadky (doznievanie) nemažú poslednú notu hneď.
                 if (now - lastSeen[0] > 1200) {
-                    tunerNote.setText("—");
-                    tunerNote.setTextColor(0xFF808080);
+                    tunerView.clear();
                     tunerText.setText("Zahrajte jednu strunu.");
-                    tunerCents.setProgress(50);
                 }
                 return;
             }
             lastSeen[0] = now;
-            boolean ok = Math.abs(p.cents) < 5;
-            tunerNote.setText(p.note() + (ok ? "  ✓" : ""));
-            tunerNote.setTextColor(ok ? GREEN : RED);
+            boolean ok = Math.abs(p.cents) < TunerView.OK;
+            tunerView.set(p.note(), p.cents);
             tunerText.setText(String.format(Locale.ROOT, "%+.0f centov   %.1f Hz   %s", p.cents, p.hz,
                     ok ? "naladené" : p.cents < 0 ? "pritiahnuť" : "povoliť"));
-            tunerCents.setProgress((int) Math.max(0, Math.min(100, 50 + p.cents)));
         });
         engine.tuner = t;
     }

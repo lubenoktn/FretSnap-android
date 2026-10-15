@@ -1,9 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Vlastná horná lišta je v rozložení, systémová sa nezobrazuje. -->
+    <!-- Vlastná horná lišta je v rozložení, systémová sa nezobrazuje. Vzhľad sa volí v Nastaveniach. -->
     <style name="Riffy" parent="@android:style/Theme.DeviceDefault.DayNight">
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">@bool/light_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/light_bars</item>
+    </style>
+
+    <style name="Riffy.Dark" parent="@android:style/Theme.DeviceDefault">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="Riffy.Light" parent="@android:style/Theme.DeviceDefault.Light">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- Farba zvýraznenia: prekryje colorAccent zvoleného vzhľadu. -->
+    <style name="Accent" />
+
+    <style name="Accent.Blue">
+        <item name="android:colorAccent">#1E88E5</item>
+    </style>
+
+    <style name="Accent.Green">
+        <item name="android:colorAccent">#43A047</item>
+    </style>
+
+    <style name="Accent.Orange">
+        <item name="android:colorAccent">#FB8C00</item>
+    </style>
+
+    <style name="Accent.Purple">
+        <item name="android:colorAccent">#8E24AA</item>
+    </style>
+
+    <style name="Accent.Pink">
+        <item name="android:colorAccent">#D81B60</item>
     </style>
 
     <style name="Section">

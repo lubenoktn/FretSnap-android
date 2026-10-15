@@ -39,6 +39,13 @@
             android:maxLines="2"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="12sp" />
+
+        <sk.lubeno.riffy.WaveView
+            android:id="@+id/rowWave"
+            android:layout_width="match_parent"
+            android:layout_height="22dp"
+            android:layout_marginTop="4dp"
+            android:importantForAccessibility="no" />
     </LinearLayout>
 
     <TextView
