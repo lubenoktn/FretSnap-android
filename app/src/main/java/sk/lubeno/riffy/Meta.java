@@ -26,6 +26,8 @@ final class Meta {
         String drums = "";
         /** Kde v nahrávke (ms) je prvá doba taktu; -1 = nevie sa. */
         int beat0 = -1;
+        /** Doba už doladená podľa úderov v nahrávke. */
+        boolean aligned;
 
         boolean empty() {
             return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite && drums.isEmpty();
@@ -60,6 +62,7 @@ final class Meta {
         i.favorite = o.optBoolean("favorite");
         i.drums = o.optString("drums");
         i.beat0 = o.optInt("beat0", -1);
+        i.aligned = o.optBoolean("aligned");
         return i;
     }
 
@@ -75,6 +78,7 @@ final class Meta {
                 o.put("favorite", i.favorite);
                 if (!i.drums.isEmpty()) o.put("drums", i.drums);
                 if (i.beat0 >= 0) o.put("beat0", i.beat0);
+                if (i.aligned) o.put("aligned", true);
                 all.put(name, o);
             }
         } catch (JSONException ignored) {
@@ -97,6 +101,7 @@ final class Meta {
             o.put("favorite", i.favorite);
             if (!i.drums.isEmpty()) o.put("drums", i.drums);
             if (i.beat0 >= 0) o.put("beat0", i.beat0);
+            if (i.aligned) o.put("aligned", true);
             return o.toString().getBytes(StandardCharsets.UTF_8);
         } catch (JSONException e) {
             return new byte[0];
@@ -116,6 +121,7 @@ final class Meta {
             i.favorite = o.optBoolean("favorite");
             i.drums = o.optString("drums");
             i.beat0 = o.optInt("beat0", -1);
+            i.aligned = o.optBoolean("aligned");
             return i;
         } catch (JSONException e) {
             return null;

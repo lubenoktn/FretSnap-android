@@ -16,11 +16,16 @@ abstract class Output {
     /** Koľko rámcov už zaznelo (približne). */
     abstract long played();
 
+    /** O koľko ms neskôr zaznie, čo sa práve pošle. */
+    abstract double latencyMs();
+
     abstract void close();
 
     /** Cez Android (reproduktor, slúchadlá v telefóne, Bluetooth). */
     static final class Track extends Output {
         private final AudioTrack track;
+        private final android.media.AudioTimestamp stamp = new android.media.AudioTimestamp();
+        private long written;
 
         Track(AudioDeviceInfo device) {
             int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
@@ -39,6 +44,16 @@ abstract class Output {
 
         void write(short[] pcm, int n) {
             track.write(pcm, 0, n);
+            written += n;
+        }
+
+        double latencyMs() {
+            if (track.getTimestamp(stamp)) {
+                double now = stamp.framePosition + (System.nanoTime() - stamp.nanoTime) * (RATE / 1e9);
+                return Math.max(0, (written - now) * 1000.0 / RATE);
+            }
+            // Bez časovej značky: čo je v zásobe, plus odhad pre zvukový hardvér.
+            return Math.max(0, written - played()) * 1000.0 / RATE + 20;
         }
 
         long played() {
@@ -84,6 +99,10 @@ abstract class Output {
         long played() {
             // V zásobe výstupu čaká najviac ~40 ms zvuku.
             return Math.max(0, written - RATE / 25);
+        }
+
+        double latencyMs() {
+            return 50;
         }
 
         void close() {

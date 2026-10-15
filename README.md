@@ -22,3 +22,8 @@ Zostavenie (Mac, Homebrew: openjdk@17, android-commandlinetools):
 
 Výstupy zostavenia idú do `~/.cache/riffy-build`, mimo plochy synchronizovanej cez iCloud
 (ten v nich vytváral kópie súborov „(1)“, ktoré pokazili zostavenie).
+
+Zvuky bicích (`app/src/main/res/raw/d_*.pcm`) sú zo súpravy
+[Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums) od Versilian Studios
+(licencia CC0): pre každý nástroj zmiešané mikrofóny kopáka, rytmičáka a nad súpravou,
+mono 48 kHz 16 bit.

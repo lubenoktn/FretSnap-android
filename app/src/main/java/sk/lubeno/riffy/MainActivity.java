@@ -2137,6 +2137,38 @@ public class MainActivity extends Activity {
         tickClock();
         DRUMS.follow(this, new Output.Track(playbackDevice()), playerClock, Math.max(0, r.info.beat0));
         showTools();
+        if (!r.info.aligned) align(r);
+    }
+
+    /**
+     * Doladí, kde v riffe sú doby, podľa úderov v nahrávke (raz; potom je to uložené pri riffe).
+     * Odhad pri nahrávaní nevie o všetkých oneskoreniach v ToneX a v telefóne.
+     */
+    void align(Riff r) {
+        Uri uri = r.uri();
+        int bpm0 = r.info.bpm, base = Math.max(0, r.info.beat0);
+        IO.execute(() -> {
+            try {
+                int rate;
+                try (InputStream in = getContentResolver().openInputStream(uri)) {
+                    rate = Beat.rateOf(in);
+                }
+                float[] x;
+                try (InputStream in = getContentResolver().openInputStream(uri)) {
+                    x = Beat.mono(in, 0, rate * 60L);
+                }
+                int shift = Beat.shiftMs(Beat.onsets(x, rate), base, bpm0);
+                int bar = Math.round(240000f / bpm0);
+                int fixed = Math.floorMod(base + shift, bar);
+                ui.post(() -> {
+                    r.info.beat0 = fixed;
+                    r.info.aligned = true;
+                    saveMeta(r);
+                    if (playingRiff == r && DRUMS.following()) DRUMS.setFirstBeat(fixed);
+                });
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     void stopFollowing() {

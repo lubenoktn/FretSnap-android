@@ -9,6 +9,10 @@ import java.io.InputStream;
  * Sprievodné bicie: hotové rytmy (rock, metal, reggae, balada) v 4/4, prechod každých
  * niekoľko taktov a činel po ňom. Hrajú buď samé (k hraniu a nahrávaniu), alebo idú
  * za prehrávanou nahrávkou ({@link Clock}), aby sedeli s riffom aj pri slučke a spomalení.
+ *
+ * Zvuky (res/raw/d_*.pcm, mono 48 kHz 16 bit) sú zo súpravy Virtuosity Drums od Versilian Studios
+ * (CC0, github.com/sfzinstruments/virtuosity_drums): blízke mikrofóny a mikrofóny nad súpravou
+ * zmiešané do jedného úderu. Paličky na odpočet (d_stick) sú vypočítané.
  */
 final class Drums {
     static final int RATE = 48000;
@@ -54,6 +58,8 @@ final class Drums {
         final Bar fill;
         /** Oneskorenie párnych osmín (0 = rovno, 0,67 = triolový pocit). */
         final float swing;
+        /** Hlasitosť štýlu, aby boli štýly rovnako hlasné (reggae má málo úderov). */
+        float gain = 1;
 
         Style(float swing, Bar fill, Bar... grooves) {
             this.swing = swing;
@@ -85,6 +91,12 @@ final class Drums {
                     Bar.of("H o.o.o.o.o.o.o.o.", "R ....x.......x...", "K X.....o.X......."),
                     Bar.of("H o.o.o.o.o.o.o.o.", "R ....x.......x...", "K X.....o.X.....o.")),
     };
+
+    static {
+        PATTERNS[1].gain = 0.7f;
+        PATTERNS[2].gain = 1.8f;
+        PATTERNS[3].gain = 1.45f;
+    }
 
     private static final Bar COUNT_IN = Bar.of("P X...x...x...x...");
     private static final float[] LEVEL = {1f, 0.9f, 0.8f, 0.55f, 0.5f, 0.6f, 0.45f, 0.85f, 0.85f, 0.9f, 0.8f};
@@ -212,7 +224,7 @@ final class Drums {
                     if (voiceFade[k] > 0) voiceGain[k] -= voiceFade[k];
                     if (voicePos[k] >= v.length || voiceGain[k] <= 0) voice[k] = null;
                 }
-                mix *= volume / 32768f;
+                mix *= volume * 1.9f * s.gain / 32768f;
                 // Mäkké obmedzenie, aby súčet úderov neprebudil
                 float x = Math.max(-1.5f, Math.min(1.5f, mix));
                 float y = x - x * x * x / 6.75f;
@@ -274,7 +286,17 @@ final class Drums {
     }
 
     private double target(Clock c) {
-        return (c.positionMs() - firstBeatMs) * bpm / 60000.0;
+        return target(c, 0);
+    }
+
+    /** Doba v nahrávke o aheadMs neskôr (keď zaznie to, čo sa práve posiela). */
+    private double target(Clock c, double aheadMs) {
+        return (c.positionMs() + aheadMs * c.speed() - firstBeatMs) * bpm / 60000.0;
+    }
+
+    /** Doladená prvá doba prehrávaného riffu. */
+    void setFirstBeat(double ms) {
+        firstBeatMs = ms;
     }
 
     private void begin(Sequencer s, Output out) {
@@ -328,7 +350,8 @@ final class Drums {
                         continue;
                     }
                     speed = c.speed();
-                    double want = target(c);
+                    // Bicie zaznejú až o oneskorenie výstupu neskôr; hrá sa to, čo bude v nahrávke vtedy.
+                    double want = target(c, t.latencyMs());
                     // Viac než ~35 ms vedľa (skok, slučka, začiatok): preskočiť tam.
                     if (Math.abs(want - s.beat) * 60000.0 / bpm > 35) s.seek(want);
                 }
