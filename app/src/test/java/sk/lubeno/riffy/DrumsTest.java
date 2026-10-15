@@ -53,6 +53,21 @@ public class DrumsTest {
     }
 
     @Test
+    public void leadInPlaysGrooveThenSticks() {
+        Drums.Sequencer s = new Drums.Sequencer(kit());
+        s.countIn = true;
+        s.bpm = 120;
+        s.volume = 1;
+        s.seek(-8);
+        short[] out = new short[192000];
+        s.render(out, out.length, 1);
+        // Predposledný takt hrá rytmus (hi-hat aj na osminách), posledný len paličky na dobách
+        assertTrue(out[12000] != 0);
+        for (int b = 0; b < 4; b++) assertTrue(out[96000 + b * 24000] != 0);
+        assertEquals(0, out[96000 + 12000]);
+    }
+
+    @Test
     public void reggaeSwingDelaysOffbeats() {
         Drums.Sequencer s = new Drums.Sequencer(kit());
         s.style = 2;

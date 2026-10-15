@@ -350,7 +350,8 @@ public class MainActivity extends Activity {
             return true;
         });
         countChip.setOnClickListener(v -> {
-            prefs.edit().putBoolean("countIn", !prefs.getBoolean("countIn", false)).apply();
+            int bars = leadBars();
+            prefs.edit().putInt("leadBars", bars == 0 ? 1 : bars == 1 ? LEAD_IN : 0).apply();
             showTools();
         });
 
@@ -790,9 +791,9 @@ public class MainActivity extends Activity {
         metroChip.setBackgroundResource(on ? R.drawable.bg_chip_on : R.drawable.bg_chip);
         metroChip.setContentDescription("Metronóm " + bpm + " BPM, " + (on ? "zapnutý" : "vypnutý")
                 + ". Podržaním nastavíte tempo.");
-        boolean count = prefs.getBoolean("countIn", false);
-        countChip.setBackgroundResource(count ? R.drawable.bg_chip_on : R.drawable.bg_chip);
-        countChip.setText(count ? "Odpočet ✓" : "Odpočet");
+        int lead = leadBars();
+        countChip.setBackgroundResource(lead > 0 ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+        countChip.setText(lead == 0 ? "Odpočet" : lead == 1 ? "Odpočet ✓" : "Rozbeh " + lead + " ✓");
         tunerButton.setBackgroundResource(tunerOn ? R.drawable.bg_circle_on : R.drawable.bg_circle);
         boolean drums = DRUMS.playing(Drums.DRUMS);
         drumChip.setText("🥁 " + Drums.STYLES[prefs.getInt("drumStyle", 0)] + (drums ? "  ●" : ""));
@@ -1397,11 +1398,19 @@ public class MainActivity extends Activity {
             notice("Vstup sa ešte spúšťa, skúste o chvíľu.", null, null);
             return;
         }
-        if (prefs.getBoolean("countIn", false)) startCountIn();
+        if (leadBars() > 0) startCountIn();
         else beginRecording(false);
     }
 
-    /** Odpočet jedného taktu metronómom, potom sa začne nahrávať. */
+    static final int LEAD_IN = 4;
+
+    /** Takty pred nahrávaním: 0 = hneď, 1 = odpočet, LEAD_IN = rozbeh (bicie hrajú, posledný takt odpočet). */
+    int leadBars() {
+        if (!prefs.contains("leadBars")) return prefs.getBoolean("countIn", false) ? 1 : 0;
+        return prefs.getInt("leadBars", 0);
+    }
+
+    /** Rozbeh a odpočet posledného taktu (metronómom alebo paličkami), potom sa začne nahrávať. */
     void startCountIn() {
         counting = true;
         boolean free = DRUMS.running() && !DRUMS.following();
@@ -1409,25 +1418,29 @@ public class MainActivity extends Activity {
         // Hrajúce bicie odpočítajú paličkami a pokračujú; inak odpočíta metronóm.
         stopFollowing();
         DRUMS.bpm = bpm;
-        DRUMS.start(this, output(), wasOn ? DRUMS.mode : Drums.CLICK, true);
-        int beats = DRUMS.beatsPerBar();
-        long beatMs = 60000L / bpm;
+        int lead = leadBars();
+        DRUMS.start(this, output(), wasOn ? DRUMS.mode : Drums.CLICK, lead);
+        int bar = DRUMS.beatsPerBar(), beats = bar * lead;
+        double beatMs = 60000.0 / bpm;
         long now = SystemClock.uptimeMillis();
         banner.setVisibility(View.VISIBLE);
         banner.setBackgroundTintList(ColorStateList.valueOf(ORANGE));
         for (int k = 0; k < beats; k++) {
-            int left = beats - k;
+            int left = beats - k, b = k / bar + 1;
+            boolean last = left <= bar;
+            if (!last && k % bar != 0) continue;
             ui.postAtTime(() -> {
-                rec.setText(String.valueOf(left));
-                banner.setText("Odpočet " + left + "   (ťuknutím zrušíte)");
-            }, COUNT_IN, now + k * beatMs);
+                rec.setText(last ? String.valueOf(left) : "♪");
+                banner.setText((last ? "Odpočet " + left : "Rozbeh – takt " + b + " z " + (lead - 1))
+                        + "   (ťuknutím zrušíte)");
+            }, COUNT_IN, now + Math.round(k * beatMs));
         }
         ui.postAtTime(() -> {
             counting = false;
             if (!wasOn) rhythmOff();
             showTools();
             beginRecording(true);
-        }, COUNT_IN, now + beats * beatMs);
+        }, COUNT_IN, now + Math.round(beats * beatMs));
     }
 
     void cancelCountIn() {

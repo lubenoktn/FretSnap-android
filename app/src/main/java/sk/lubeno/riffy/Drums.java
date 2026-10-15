@@ -252,7 +252,7 @@ final class Drums {
 
         Bar barFor(long bar) {
             Style s = current();
-            if (bar < 0) return countIn ? null : s.grooves[0];
+            if (bar < 0) return countIn && bar == -1 ? null : s.grooves[0];
             int every = fillBars;
             if (every > 0 && bar % every == every - 1) return s.fill;
             return s.grooves[(int) ((bar / 2) % s.grooves.length)];
@@ -262,7 +262,7 @@ final class Drums {
             int p = perBeat(), bpb = beatsPerBar(), steps = bpb * p;
             long bar = Math.floorDiv(n, steps);
             int step = (int) Math.floorMod(n, steps);
-            if (bar < 0 && countIn) {
+            if (bar == -1 && countIn) {
                 // Odpočet: paličky na každú dobu (metronóm cvaká).
                 if (step % p == 0) {
                     if (mode == CLICK) play(step == 0 ? CLICK_HI : CLICK_LO, 1f);
@@ -272,7 +272,9 @@ final class Drums {
             }
             Backing bk = backing;
             if (mode == OFF || mode == CLICK) {
-                if (mode == CLICK) play(step == 0 ? CLICK_HI : CLICK_LO, 1f);
+                // Pri rozbehu cvaká metronóm tichšie, aby odpočet v poslednom takte vynikol.
+                float loud = bar < 0 && countIn ? 0.55f : 1f;
+                if (mode == CLICK) play(step == 0 ? CLICK_HI : CLICK_LO, loud);
                 if (bk != null) accompany(bk, bar, step, p, false, false);
                 return;
             }
@@ -292,7 +294,9 @@ final class Drums {
          * akord na začiatku taktu.
          */
         private void accompany(Backing bk, long bar, int step, int p, boolean drums, boolean kick) {
-            int ci = bk.chordAt(bar);
+            // Pri rozbehu (záporné takty) hrá koniec postupu, aby na prvej dobe začal od začiatku.
+            long len = (long) bk.roots.length * bk.barsPerChord;
+            int ci = bk.chordAt(bar < 0 && len > 0 ? Math.floorMod(bar, len) : bar);
             if (ci < 0) return;
             int root = bk.roots[ci], kind = bk.kinds[ci];
             boolean bassHit = drums ? kick || step == 0 : step % p == 0 && (step / p) % 2 == 0;
@@ -398,15 +402,21 @@ final class Drums {
 
     /** Hrá samo (metronóm, bicie alebo len slučka); s odpočtom jedného taktu pred prvou dobou. */
     void start(Context c, Output out, int mode, boolean countIn) {
+        start(c, out, mode, countIn ? 1 : 0);
+    }
+
+    /** leadBars: koľko taktov pred prvou dobou (0 = hneď, 1 = odpočet, viac = rozbeh a odpočet). */
+    void start(Context c, Output out, int mode, int leadBars) {
+        boolean countIn = leadBars > 0;
         stop();
         clock = null;
         this.mode = mode;
         Sequencer s = new Sequencer(load(c));
         s.countIn = countIn;
         configure(s);
-        s.seek(countIn ? -s.beatsPerBar() : 0);
+        s.seek(-leadBars * s.beatsPerBar());
         // Slučka loopera začína na prvej dobe novej časovej osi.
-        if (loop != null) loopStart = countIn ? Math.round(s.beatsPerBar() * 60.0 / bpm * RATE) : 0;
+        if (loop != null) loopStart = Math.round(leadBars * s.beatsPerBar() * 60.0 / bpm * RATE);
         begin(s, out);
     }
 
