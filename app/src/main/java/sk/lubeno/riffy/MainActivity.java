@@ -280,6 +280,9 @@ public class MainActivity extends Activity {
         chip.setOnClickListener(v -> showSettings(true));
         findViewById(R.id.settingsButton).setOnClickListener(v -> showSettings(true));
         findViewById(R.id.settingsBack).setOnClickListener(v -> showSettings(false));
+        findViewById(R.id.helpButton).setOnClickListener(v -> showManual(true));
+        findViewById(R.id.manualButton).setOnClickListener(v -> showManual(true));
+        findViewById(R.id.manualBack).setOnClickListener(v -> showManual(false));
         setChip(GRAY, "Vstup vypnutý");
 
         // Úroveň vstupu
@@ -623,7 +626,12 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (settingsPage.getVisibility() == View.VISIBLE) showSettings(false);
+        View manual = findViewById(R.id.manualPage);
+        android.webkit.WebView web = findViewById(R.id.manual);
+        if (manual.getVisibility() == View.VISIBLE) {
+            if (web.canGoBack()) web.goBack();
+            else showManual(false);
+        } else if (settingsPage.getVisibility() == View.VISIBLE) showSettings(false);
         else if (!selection.isEmpty()) clearSelection();
         else if (playerMore.getVisibility() == View.VISIBLE) expandPlayer(false);
         else if (search.getVisibility() == View.VISIBLE) toggleSearch();
@@ -658,6 +666,35 @@ public class MainActivity extends Activity {
         if (show) showBackupInfo();
         settingsPage.setVisibility(show ? View.VISIBLE : View.GONE);
         mainPage.setVisibility(show ? View.GONE : View.VISIBLE);
+    }
+
+    /**
+     * Návod (assets/navod.html) vo farbách aplikácie: tmavý alebo svetlý podľa vzhľadu, so zvolenou
+     * farbou zvýraznenia. Funguje bez internetu.
+     */
+    void showManual(boolean show) {
+        View page = findViewById(R.id.manualPage);
+        if (show) {
+            android.webkit.WebView web = findViewById(R.id.manual);
+            try (InputStream in = getAssets().open("navod.html")) {
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
+                int bg = Look.color(this, android.R.attr.colorBackground);
+                boolean dark = (0.299 * ((bg >> 16) & 255) + 0.587 * ((bg >> 8) & 255) + 0.114 * (bg & 255)) < 128;
+                String accent = String.format("#%06X", Look.accent(this) & 0xFFFFFF);
+                String html = new String(b.toByteArray(), java.nio.charset.StandardCharsets.UTF_8)
+                        .replace("<html lang=\"sk\">", "<html lang=\"sk\"" + (dark ? " class=\"dark\"" : "")
+                                + " style=\"--accent:" + accent + "\">");
+                web.setBackgroundColor(bg);
+                web.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "utf-8", null);
+            } catch (IOException e) {
+                notice("Návod sa nedá otvoriť.", null, null);
+                return;
+            }
+        }
+        page.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
     /** Krátke hlásenie dole, prípadne s tlačidlom (Vrátiť, Podrobnosti). */

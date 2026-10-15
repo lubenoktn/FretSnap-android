@@ -27,3 +27,6 @@ Zvuky bicích (`app/src/main/res/raw/d_*.pcm`) sú zo súpravy
 [Virtuosity Drums](https://github.com/sfzinstruments/virtuosity_drums) od Versilian Studios
 (licencia CC0): pre každý nástroj zmiešané mikrofóny kopáka, rytmičáka a nad súpravou,
 mono 48 kHz 16 bit.
+
+Návod pre používateľa je v aplikácii (? na hlavnej obrazovke, alebo Nastavenia → Návod);
+jeho text je v `app/src/main/assets/navod.html`. Pri zmene funkcií ho treba upraviť.

@@ -42,6 +42,15 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/helpButton"
+                android:layout_width="40dp"
+                android:layout_height="48dp"
+                android:contentDescription="Návod"
+                android:gravity="center"
+                android:text="?"
+                android:textSize="22sp" />
+
+            <TextView
                 android:id="@+id/settingsButton"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
@@ -985,6 +994,13 @@
                     android:layout_weight="1" />
 
                 <Button
+                    android:id="@+id/manualButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Návod"
+                    android:textAllCaps="false" />
+
+                <Button
                     android:id="@+id/updates"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -993,4 +1009,29 @@
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
+
+    <!-- Návod -->
+    <LinearLayout
+        android:id="@+id/manualPage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="?android:attr/colorBackground"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/manualBack"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:paddingLeft="16dp"
+            android:text="←  Návod"
+            android:textSize="22sp" />
+
+        <WebView
+            android:id="@+id/manual"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
 </FrameLayout>
