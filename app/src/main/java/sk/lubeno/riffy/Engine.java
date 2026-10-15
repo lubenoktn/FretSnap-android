@@ -19,6 +19,18 @@ final class Engine {
 
         /** Vstup skončil chybou (napr. odpojené zariadenie); prípadná nahrávka sa má uložiť. */
         void onFailed(String text);
+
+        /** Vstup sa otvoril a číta sa z neho. */
+        default void onOpened(Source c) {
+        }
+
+        /** Zo vstupu nič nejde, skúša sa otvoriť znova. */
+        default void onRetry() {
+        }
+
+        /** Vstup sa nedá otvoriť. */
+        default void onOpenFailed(String text) {
+        }
     }
 
     /** Hotová nahrávka. */
@@ -114,7 +126,10 @@ final class Engine {
         for (int attempt = 0; ; attempt++) {
             if (!runOnce(opener, attempt, attempt < RETRIES)) break;
             Listener l = listener;
-            if (l != null) l.onStatus("Zariadenie sa ešte zapína, skúšam ho otvoriť znova…");
+            if (l != null) {
+                l.onStatus("Zariadenie sa ešte zapína, skúšam ho otvoriť znova…");
+                l.onRetry();
+            }
             try {
                 Thread.sleep(800);
             } catch (InterruptedException e) {
@@ -139,7 +154,10 @@ final class Engine {
                 if (thread == Thread.currentThread()) running = false;
             }
             Listener l = listener;
-            if (l != null) l.onStatus(e.getMessage());
+            if (l != null) {
+                l.onStatus(e.getMessage());
+                l.onOpenFailed(e.getMessage());
+            }
             return false;
         }
         c.gain = gain;
@@ -154,7 +172,10 @@ final class Engine {
             historyFrames = 0;
         }
         Listener l = listener;
-        if (l != null) l.onStatus("Signál ide z: " + c.where);
+        if (l != null) {
+            l.onStatus("Signál ide z: " + c.where);
+            l.onOpened(c);
+        }
 
         int[] buf = new int[capacity / 20 * c.channels];
         int[] peak = new int[c.channels];
