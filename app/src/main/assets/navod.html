@@ -38,6 +38,8 @@
   <a href="#ladicka">4. Ladička</a>
   <a href="#rytmus">5. Metronóm a bicie</a>
   <a href="#looper">6. Looper</a>
+  <a href="#sprievod">6a. Sprievod s akordmi</a>
+  <a href="#stupnica">6b. Stupnica na hmatníku</a>
   <a href="#zoznam">7. Zoznam riffov</a>
   <a href="#prehravac">8. Prehrávač</a>
   <a href="#piesne">9. Piesne</a>
@@ -64,7 +66,8 @@ počas používania Riffy „nevidí“ a zvuk do jeho slúchadiel posiela Riffy
   <dt>Pásik úrovne</dt><dd>Zelená je v poriadku, žltá hlasno, červená a červený okraj = prebudené. Pod ním sú úrovne kanálov.</dd>
   <dt>Zosilnenie ▾</dt><dd>Ťuknutím ukážete posuvník; ak je zvuk prebudený, uberte.</dd>
   <dt>Tlačidlá</dt><dd>⟲ 30 s (uložiť, čo práve zaznelo), veľké ● (nahrávať), ♪ Ladička.</dd>
-  <dt>Nástroje</dt><dd>♩ metronóm, 🥁 bicie, Odpočet, 🔁 Looper – riadok sa dá posúvať do boku.</dd>
+  <dt>Nástroje</dt><dd>♩ metronóm, 🥁 bicie, Odpočet, 🔁 Looper, 🎼 Stupnica, 🎹 Sprievod – riadok sa dá posúvať do boku.
+      Keď je otvorený niektorý nástroj, zaberie miesto zoznamu riffov (zoznam sa vráti, keď ho zavriete).</dd>
   <dt>Dnes hrané</dt><dd>Koľko ste dnes hrali a koľko dní po sebe. Ťuknutím sa otvorí denník za dva týždne.</dd>
 </dl>
 
@@ -90,9 +93,14 @@ sekundu pred tým, aby sa nestratil prvý tón), a samo skončí po 4 sekundách
 
 <h2 id="ladicka">4. Ladička</h2>
 <ul>
-  <li>Ťuknite na <span class="key">♪ Ladička</span> a zahrajte jednu strunu (najlepšie prázdnu, čistým zvukom).</li>
-  <li>Veľké písmeno je tón (E2, A2, D3, G3, B3, E4 pri štandardnom ladení), ručička ukazuje odchýlku v centoch.</li>
+  <li>Ťuknite na <span class="key">♪ Ladička</span>, vyberte ladenie (Štandard, Drop D, Eb, D štandard, Drop C, DADGAD, Open G)
+      a zahrajte jednu strunu (najlepšie prázdnu, čistým zvukom).</li>
+  <li>Ladička sama pozná, ktorú strunu ladíte – ukáže jej tón (napr. E2) a ručičkou odchýlku v centoch.</li>
   <li>Zelená = naladené, oranžová = blízko, červená = ďaleko. Ručička vľavo (♭) – pritiahnuť, vpravo (♯) – povoliť.</li>
+  <li>Naladená struna sa v rade strún zazelená (✓), takže vidíte, ktoré sú hotové.</li>
+  <li><b>Signál</b> dole ukazuje, či ladička vôbec niečo počuje. „Ticho“ znamená, že zo vstupu nič nejde – skontrolujte štítok hore a hlasitosť v ToneX.</li>
+  <li>Komorné A (440 Hz) sa dá posunúť tlačidlami − a + (napr. 442 Hz pri hraní s klavírom).</li>
+  <li>Tóny sa píšu po slovensky: H je anglické B.</li>
 </ul>
 
 <h2 id="rytmus">5. Metronóm a bicie</h2>
@@ -128,6 +136,27 @@ sekundu pred tým, aby sa nestratil prvý tón), a samo skončí po 4 sekundách
   <li>Ak looper zastavíte (napr. pustením riffu), tlačidlo <span class="key">▶ Pustiť slučku</span> ju pustí znova po odpočte.</li>
 </ul>
 
+<h2 id="sprievod">6a. Sprievod s akordmi</h2>
+<p>Riffy k bicím zahrá basu a klávesy podľa postupu akordov – na cvičenie sól a improvizácie.</p>
+<ol>
+  <li>Ťuknite na <span class="key">🎹 Sprievod</span>.</li>
+  <li>Vyberte tóninu (<span class="key">Tónina ▾</span>) a hotový postup – pop I–V–vi–IV, balada, rock, 12-taktový blues, molové postupy…</li>
+  <li>Postup si môžete upraviť: ťuknutím na akord ho zmeníte alebo odstránite, <span class="key">+</span> pridá ďalší. Ponúkajú sa akordy, ktoré do tóniny patria.</li>
+  <li>Nastavte, či akord trvá 1 alebo 2 takty, a čo hrá: basa, klávesy (klavír), bicie (štýl bicích a tempo nastavíte podržaním 🥁 a ♩).</li>
+  <li><span class="key">▶ Hrať</span> – po odpočte hrá dookola. Práve hraný akord je zvýraznený.</li>
+  <li><span class="key">🎼 Stupnica k tomu</span> ukáže stupnicu tóniny na hmatníku; <b>zelené sú tóny práve hraného akordu</b> – na tie sa oplatí pristávať.</li>
+</ol>
+<p>Sprievod ide do ToneX ako bicie a sedí s looperom: môžete si naň nahrať rytmiku a hrať sólo.</p>
+<div class="tip">Basa je zo vzoriek Growlybass (Karoryfer Samples), klavír z Versilian Community Sample Library – obe s voľnou licenciou CC0.</div>
+
+<h2 id="stupnica">6b. Stupnica na hmatníku</h2>
+<ul>
+  <li>Ťuknite na <span class="key">🎼 Stupnica</span> a <b>sami si zvoľte</b> základný tón (C až H) a stupnicu: pentatonika mol/dur, blues, prirodzená mol, dur, dórska, mixolydická, harmonická mol, frygická.</li>
+  <li>Hmatník ukazuje tóny stupnice s ich menami; základný tón je vo farbe zvýraznenia. Hmatník sa riadi ladením zvoleným v ladičke.</li>
+  <li><span class="key">Celý hmatník</span> alebo <span class="key">Poloha 1, 2…</span> – v polohe sú zvýraznené tóny v okne piatich pražcov.</li>
+  <li>Pri riffe v ⋮ → <b>Stupnica a tónina</b>: Riffy z nahrávky zistí tóninu (napr. e mol) a nastaví k nej stupnicu. Ak nesedí, zmeňte ju hore.</li>
+</ul>
+
 <h2 id="zoznam">7. Zoznam riffov</h2>
 <ul>
   <li>Riffy sú zoradené podľa dní. Pri každom je dĺžka, tempo, štýl bicích, pieseň, počet značiek a vlnka.</li>
@@ -139,7 +168,10 @@ sekundu pred tým, aby sa nestratil prvý tón), a samo skončí po 4 sekundách
 <h3>Ponuka ⋮ pri riffe</h3>
 <dl>
   <dt>Poznámka, tempo, tónina</dt><dd>Vlastný popis riffu.</dd>
+  <dt>🎛 Zvuk (ToneX)</dt><dd>Aký zvuk alebo preset ste mali (napr. „Marshall crunch, preset 3“). Ukáže sa pri riffe, dá sa podľa neho hľadať
+      a nové nahrávky ho dostanú automaticky, kým ho nezmeníte (po uložení riffu je v hlásení tlačidlo <span class="key">Zvuk</span>).</dd>
   <dt>🎵 Zaradiť do piesne</dt><dd>Pozri <a href="#piesne">Piesne</a>.</dd>
+  <dt>🎼 Stupnica a tónina</dt><dd>Zistí tóninu riffu a ukáže k nej stupnicu na hmatníku.</dd>
   <dt>Premenovať</dt><dd>Ak sa Android opýta na povolenie upraviť súbor, potvrďte (týka sa riffov z predošlej inštalácie).</dd>
   <dt>Zistiť tempo z hrania</dt><dd>Riffy nájde v nahrávke údery a určí tempo a kde začína takt. Pri voľne hranom riffe povie, že sa nedá – tempo potom zadajte ručne.</dd>
   <dt>Poslať ako WAV / M4A</dt><dd>WAV je plná kvalita, M4A menší súbor (do správ, mailu).</dd>

@@ -53,6 +53,7 @@ import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.NumberPicker;
@@ -320,6 +321,8 @@ public class MainActivity extends Activity {
         findViewById(R.id.backupNew).setOnClickListener(v -> backup(true));
         findViewById(R.id.backupAll).setOnClickListener(v -> backup(false));
         setupLooper();
+        setupScale();
+        setupBacking();
         engine.tap = this::onInput;
 
         // Metronóm a odpočet
@@ -597,6 +600,7 @@ public class MainActivity extends Activity {
             engine.stop();
             if (!counting) {
                 if (!DRUMS.following()) DRUMS.stop();
+                DRUMS.backing = null;
                 LOOPER.cancel();
             }
             level.clear();
@@ -729,7 +733,7 @@ public class MainActivity extends Activity {
         tunerButton.setVisibility(recording ? View.INVISIBLE : View.VISIBLE);
         tools.setVisibility(recording ? View.GONE : View.VISIBLE);
         diaryText.setVisibility(recording ? View.GONE : View.VISIBLE);
-        listArea.setVisibility(recording ? View.GONE : View.VISIBLE);
+        updatePanels();
         spacer.setVisibility(recording ? View.VISIBLE : View.GONE);
         if (recording) stopPlaying();
         rec.setText(recording ? "■" : "●");
@@ -796,6 +800,9 @@ public class MainActivity extends Activity {
         boolean loop = LOOPER.hasLoop() || LOOPER.state() != LoopStation.EMPTY;
         looperChip.setText("🔁 Looper" + (loop ? "  ●" : ""));
         looperChip.setBackgroundResource(looperOn ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+        findViewById(R.id.scaleChip).setBackgroundResource(scaleOn ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+        ((TextView) findViewById(R.id.backingChip)).setText("🎹 Sprievod" + (DRUMS.backing != null ? "  ●" : ""));
+        findViewById(R.id.backingChip).setBackgroundResource(backingOn ? R.drawable.bg_chip_on : R.drawable.bg_chip);
         drumChip.setContentDescription("Bicie " + Drums.STYLES[prefs.getInt("drumStyle", 0)] + ", "
                 + (drums ? "hrajú" : "vypnuté") + ". Podržaním vyberiete štýl.");
     }
@@ -1176,7 +1183,7 @@ public class MainActivity extends Activity {
 
     /** Vypne metronóm aj bicie; slučka loopera hrá ďalej. */
     void rhythmOff() {
-        if (LOOPER.hasLoop() || LOOPER.state() != LoopStation.EMPTY) DRUMS.mode = Drums.OFF;
+        if (LOOPER.hasLoop() || LOOPER.state() != LoopStation.EMPTY || DRUMS.backing != null) DRUMS.mode = Drums.OFF;
         else DRUMS.stop();
     }
 
@@ -1482,7 +1489,7 @@ public class MainActivity extends Activity {
                 if (r != null) {
                     String name = "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(since));
                     String saved = save(r.file, name, tempo, groove, marks);
-                    ui.post(() -> notice("Uložené: " + label(saved), null, null));
+                    ui.post(() -> savedNotice(saved));
                 }
             } catch (Exception e) {
                 String msg = e.getMessage();
@@ -1524,7 +1531,7 @@ public class MainActivity extends Activity {
                     ui.post(() -> notice("Ešte nie je čo uložiť.", null, null));
                 } else {
                     String saved = save(temp, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)) + " spätne", tempo, groove);
-                    ui.post(() -> notice("Uložené: " + label(saved), null, null));
+                    ui.post(() -> savedNotice(saved));
                 }
             } catch (Exception e) {
                 String msg = e.getMessage();
@@ -1612,8 +1619,10 @@ public class MainActivity extends Activity {
             if (c != null && c.moveToFirst()) saved = c.getString(0).replaceFirst("\\.wav$", "");
         }
         boolean hasMarks = marks != null && !marks.isEmpty();
-        if (tempo > 0 || hasMarks) {
+        String tone = prefs.getString("lastTone", "");
+        if (tempo > 0 || hasMarks || !tone.isEmpty()) {
             Meta.Info i = meta.get(saved);
+            if (i.tone.isEmpty()) i.tone = tone;
             if (hasMarks) {
                 long cut = range[0] * 1000 / format.rate, len = (range[1] - range[0]) * 1000 / format.rate;
                 for (int m : marks) if (m - cut >= 0 && m - cut <= len) i.markers.add((int) (m - cut));
@@ -1817,6 +1826,9 @@ public class MainActivity extends Activity {
         tools.setVisibility(show ? View.GONE : View.VISIBLE);
         tunerPanel.setVisibility(!show && tunerOn ? View.VISIBLE : View.GONE);
         looperPanel.setVisibility(!show && looperOn ? View.VISIBLE : View.GONE);
+        findViewById(R.id.scalePanel).setVisibility(!show && scaleOn ? View.VISIBLE : View.GONE);
+        findViewById(R.id.backingPanel).setVisibility(!show && backingOn ? View.VISIBLE : View.GONE);
+        updatePanels();
         InputMethodManager im = getSystemService(InputMethodManager.class);
         if (show) {
             search.requestFocus();
@@ -1874,7 +1886,7 @@ public class MainActivity extends Activity {
             if (filter == FAVORITES && !r.info.favorite) continue;
             if (filter == SONGS && r.info.song.isEmpty()) continue;
             if (!q.isEmpty() && !fold(label(r.name) + " " + r.name + " " + r.info.note + " " + r.info.key + " "
-                    + r.info.song + " " + r.info.part).contains(q)) continue;
+                    + r.info.song + " " + r.info.part + " " + r.info.tone).contains(q)) continue;
             shown.add(r);
         }
         if (filter == SONGS) {
@@ -1979,6 +1991,7 @@ public class MainActivity extends Activity {
             StringBuilder line = new StringBuilder(clock(r.duration));
             if (r.info.bpm > 0) line.append(" · ").append(r.info.bpm).append(" BPM");
             if (!r.info.drums.isEmpty()) line.append(" · 🥁 ").append(r.info.drums);
+            if (!r.info.tone.isEmpty()) line.append(" · 🎛 ").append(r.info.tone);
             if (!r.info.song.isEmpty() && filter != SONGS) line.append(" · 🎵 ").append(r.info.song)
                     .append(r.info.part.isEmpty() ? "" : " – " + r.info.part);
             if (!r.info.markers.isEmpty()) line.append(" · 📍").append(r.info.markers.size());
@@ -2145,6 +2158,7 @@ public class MainActivity extends Activity {
         // Voľne hrajúce bicie by išli mimo riffu; k riffu sa zapínajú v prehrávači.
         if (DRUMS.running()) {
             DRUMS.stop();
+            DRUMS.backing = null;
             LOOPER.cancel();
             showTools();
         }
@@ -2474,6 +2488,7 @@ public class MainActivity extends Activity {
         looperPanel.setVisibility(on ? View.VISIBLE : View.GONE);
         showLooper();
         showTools();
+        updatePanels();
     }
 
     /** Hlavné tlačidlo: nahrať slučku, pridať vrstvu, zrušiť čakanie, alebo slučku znova pustiť. */
@@ -2602,7 +2617,7 @@ public class MainActivity extends Activity {
                 w.finish(LoopStation.RATE);
                 String saved = save(temp, "Slučka " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(now)), tempo,
                         new Groove(style, 0, false, beats));
-                ui.post(() -> notice("Uložené: " + label(saved), null, null));
+                ui.post(() -> savedNotice(saved));
             } catch (Exception e) {
                 ui.post(() -> notice("Slučku sa nepodarilo uložiť.", null, null));
             } finally {
@@ -2612,38 +2627,461 @@ public class MainActivity extends Activity {
         });
     }
 
+    // ---- Stupnica ----
+
+    boolean scaleOn;
+    /** Poloha na hmatníku: -1 = celý, inak poradie polohy. */
+    int scalePos = -1;
+
+    /** Štítok (ako filtre a takty): text, zapnutý, čo urobí ťuknutie. */
+    TextView chip(String text, boolean on, Runnable click) {
+        float d = getResources().getDisplayMetrics().density;
+        TextView c = new TextView(this);
+        c.setText(text);
+        c.setGravity(Gravity.CENTER);
+        c.setMinWidth(Math.round(40 * d));
+        c.setPadding(Math.round(12 * d), 0, Math.round(12 * d), 0);
+        c.setBackgroundResource(on ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+        c.setOnClickListener(v -> click.run());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(36 * d));
+        lp.rightMargin = Math.round(6 * d);
+        c.setLayoutParams(lp);
+        return c;
+    }
+
+    void setupScale() {
+        findViewById(R.id.scaleChip).setOnClickListener(v -> setScalePanel(!scaleOn));
+    }
+
+    void setScalePanel(boolean on) {
+        scaleOn = on;
+        findViewById(R.id.scalePanel).setVisibility(on ? View.VISIBLE : View.GONE);
+        if (on) showScale();
+        showTools();
+        backingTick();
+        updatePanels();
+    }
+
+    /** Tónina a stupnica si človek volí sám (alebo ich nastaví riff či sprievod). */
+    void setScale(int root, int type) {
+        prefs.edit().putInt("scaleRoot", Math.floorMod(root, 12)).putInt("scaleType", type).apply();
+        scalePos = -1;
+        showScale();
+    }
+
+    void showScale() {
+        int root = prefs.getInt("scaleRoot", 4), type = prefs.getInt("scaleType", 0);
+        int[] strings = Tunings.strings(prefs.getInt("tuning", 0));
+        LinearLayout roots = findViewById(R.id.scaleRoots);
+        roots.removeAllViews();
+        for (int i = 0; i < 12; i++) {
+            int pc = i;
+            roots.addView(chip(Scales.ROOTS[i], i == root, () -> setScale(pc, prefs.getInt("scaleType", 0))));
+        }
+        LinearLayout types = findViewById(R.id.scaleTypes);
+        types.removeAllViews();
+        for (int i = 0; i < Scales.NAMES.length; i++) {
+            int t = i;
+            types.addView(chip(Scales.NAMES[i], i == type, () -> setScale(prefs.getInt("scaleRoot", 4), t)));
+        }
+        List<Integer> pos = Scales.positions(strings, root, type);
+        if (scalePos >= pos.size()) scalePos = -1;
+        LinearLayout row = findViewById(R.id.scalePositions);
+        row.removeAllViews();
+        row.addView(chip("Celý hmatník", scalePos < 0, () -> {
+            scalePos = -1;
+            showScale();
+        }));
+        for (int k = 0; k < pos.size(); k++) {
+            int index = k;
+            row.addView(chip("Poloha " + (k + 1), k == scalePos, () -> {
+                scalePos = index;
+                showScale();
+            }));
+        }
+        ((ScaleView) findViewById(R.id.scaleView)).set(strings, root, Scales.notes(root, type),
+                scalePos < 0 ? -1 : pos.get(scalePos));
+        ((TextView) findViewById(R.id.scaleText)).setText(Scales.ROOTS[root] + " " + Scales.NAMES[type].toLowerCase(Locale.ROOT)
+                + ": " + Scales.list(root, type) + "   ·   ladenie " + Tunings.NAMES[prefs.getInt("tuning", 0)]);
+    }
+
+    /** Stupnica k riffu: tónina z údajov riffu, inak sa zistí z nahrávky; potom si ju dá človek zmeniť. */
+    void scaleFor(Riff r) {
+        int[] k = Scales.parseKey(r.info.key);
+        if (k != null) {
+            setScale(k[0], k[1] == 1 ? Scales.MINOR_PENTA : Scales.MAJOR_PENTA);
+            setScalePanel(true);
+            return;
+        }
+        notice("Zisťujem tóninu…", null, null);
+        Uri uri = r.uri();
+        IO.execute(() -> {
+            int[] key = null;
+            try {
+                int rate;
+                try (InputStream in = getContentResolver().openInputStream(uri)) {
+                    rate = Beat.rateOf(in);
+                }
+                float[] x;
+                try (InputStream in = getContentResolver().openInputStream(uri)) {
+                    x = Beat.mono(in, 0, rate * 60L);
+                }
+                key = Scales.detectKey(Scales.chroma(x, rate));
+            } catch (Exception ignored) {
+            }
+            int[] found = key;
+            ui.post(() -> {
+                if (found == null) {
+                    notice("Tóninu sa nepodarilo zistiť – vyberte ju v paneli stupnice.", null, null);
+                    setScalePanel(true);
+                    return;
+                }
+                r.info.key = Scales.key(found[0], found[1] == 1);
+                saveMeta(r);
+                render();
+                setScale(found[0], found[1] == 1 ? Scales.MINOR_PENTA : Scales.MAJOR_PENTA);
+                setScalePanel(true);
+                notice("Tónina riffu: " + Scales.ROOTS[found[0]] + (found[1] == 1 ? " mol" : " dur")
+                        + " (zmeniť ju môžete v paneli)", null, null);
+            });
+        });
+    }
+
+    /**
+     * Keď je otvorený niektorý nástroj (ladička, looper, stupnica, sprievod), dostane miesto zoznamu
+     * riffov a dá sa posúvať; inak je vidno zoznam.
+     */
+    void updatePanels() {
+        boolean any = tunerOn || looperOn || scaleOn || backingOn;
+        boolean searching = search.getVisibility() == View.VISIBLE, rec = engine.recording();
+        findViewById(R.id.panels).setVisibility(any && !searching && !rec ? View.VISIBLE : View.GONE);
+        listArea.setVisibility(rec || (any && !searching) ? View.GONE : View.VISIBLE);
+    }
+
+    // ---- Sprievod ----
+
+    boolean backingOn;
+    final Runnable backingTick = this::backingTick;
+
+    void setupBacking() {
+        findViewById(R.id.backingChip).setOnClickListener(v -> {
+            backingOn = !backingOn;
+            findViewById(R.id.backingPanel).setVisibility(backingOn ? View.VISIBLE : View.GONE);
+            if (backingOn) showBacking();
+            showTools();
+            updatePanels();
+        });
+        findViewById(R.id.backPlay).setOnClickListener(v -> backingPlay());
+        findViewById(R.id.backScale).setOnClickListener(v -> {
+            setScale(prefs.getInt("backKey", 4), prefs.getBoolean("backMinor", true) ? Scales.MINOR_PENTA : Scales.MAJOR_PENTA);
+            setScalePanel(true);
+            View panel = findViewById(R.id.scalePanel);
+            panel.post(() -> ((android.widget.ScrollView) findViewById(R.id.panels)).smoothScrollTo(0, panel.getTop()));
+        });
+    }
+
+    int[][] progression() {
+        return Backing.decode(prefs.getString("backProg", Backing.encode(Backing.PRESET_CHORDS[4])));
+    }
+
+    Backing buildBacking() {
+        return new Backing(prefs.getInt("backKey", 4), progression(), prefs.getInt("backBars", 1),
+                prefs.getBoolean("backBass", true), prefs.getBoolean("backKeys", true));
+    }
+
+    /** Zmena počas hrania platí hneď. */
+    void backingChanged() {
+        if (DRUMS.backing != null) {
+            Backing b = buildBacking();
+            IO.execute(() -> prewarm(b));
+            DRUMS.backing = b;
+        }
+        showBacking();
+    }
+
+    /** Zvuky basy a kláves sa pripravia vopred, aby sa pri prvom akorde nezasekol zvuk. */
+    static void prewarm(Backing b) {
+        for (int i = 0; i < b.roots.length; i++) {
+            Backing.bass(Backing.bassMidi(b.roots[i]));
+            for (int m : Backing.voicing(b.roots[i], b.kinds[i])) Backing.key(m);
+        }
+    }
+
+    void backingPlay() {
+        if (DRUMS.backing != null) {
+            DRUMS.backing = null;
+            if (DRUMS.mode == Drums.OFF && !LOOPER.hasLoop() && LOOPER.state() == LoopStation.EMPTY) DRUMS.stop();
+            showBacking();
+            showTools();
+            return;
+        }
+        Backing b = buildBacking();
+        boolean drums = prefs.getBoolean("backDrums", true);
+        IO.execute(() -> {
+            prewarm(b);
+            ui.post(() -> {
+                boolean free = DRUMS.running() && !DRUMS.following();
+                if (!free) {
+                    stopPlaying();
+                    stopFollowing();
+                    DRUMS.bpm = bpm;
+                    DRUMS.start(this, output(), drums ? Drums.DRUMS : Drums.OFF, true);
+                } else if (drums && DRUMS.mode == Drums.OFF) {
+                    DRUMS.mode = Drums.DRUMS;
+                }
+                DRUMS.backing = b;
+                showBacking();
+                showTools();
+            });
+        });
+    }
+
+    void showBacking() {
+        int key = prefs.getInt("backKey", 4);
+        boolean minor = prefs.getBoolean("backMinor", true);
+        int preset = prefs.getInt("backPreset", 4);
+        LinearLayout presets = findViewById(R.id.backPresets);
+        presets.removeAllViews();
+        presets.addView(chip("Tónina: " + Scales.ROOTS[key] + (minor ? " mol" : " dur") + " ▾", false, this::backingKeyDialog));
+        for (int i = 0; i < Backing.PRESETS.length; i++) {
+            int index = i;
+            presets.addView(chip(Backing.PRESETS[i], i == preset, () -> {
+                prefs.edit().putInt("backPreset", index).putString("backProg", Backing.encode(Backing.PRESET_CHORDS[index]))
+                        .putBoolean("backMinor", Backing.PRESET_MINOR[index])
+                        .putInt("backBars", index == 3 ? 1 : prefs.getInt("backBars", 1)).apply();
+                backingChanged();
+            }));
+        }
+        int[][] prog = progression();
+        int now = DRUMS.backing != null ? DRUMS.chordNow() : -1;
+        LinearLayout chords = findViewById(R.id.backChords);
+        chords.removeAllViews();
+        float d = getResources().getDisplayMetrics().density;
+        for (int i = 0; i < prog.length; i++) {
+            int index = i;
+            TextView c = chip(Backing.name(Math.floorMod(key + prog[i][0], 12), prog[i][1]), i == now, () -> editChord(index));
+            c.setTextSize(18);
+            c.setMinWidth(Math.round(56 * d));
+            c.setTag("chord" + i);
+            chords.addView(c);
+        }
+        chords.addView(chip("+", false, () -> editChord(-1)));
+        LinearLayout opts = findViewById(R.id.backOptions);
+        opts.removeAllViews();
+        int bars = prefs.getInt("backBars", 1);
+        opts.addView(chip(bars == 1 ? "Akord na 1 takt" : "Akord na 2 takty", false, () -> {
+            prefs.edit().putInt("backBars", bars == 1 ? 2 : 1).apply();
+            backingChanged();
+        }));
+        opts.addView(chip("Basa", prefs.getBoolean("backBass", true), () -> {
+            prefs.edit().putBoolean("backBass", !prefs.getBoolean("backBass", true)).apply();
+            backingChanged();
+        }));
+        opts.addView(chip("Klávesy", prefs.getBoolean("backKeys", true), () -> {
+            prefs.edit().putBoolean("backKeys", !prefs.getBoolean("backKeys", true)).apply();
+            backingChanged();
+        }));
+        boolean drums = prefs.getBoolean("backDrums", true);
+        opts.addView(chip("Bicie: " + Drums.STYLES[prefs.getInt("drumStyle", 0)], drums, () -> {
+            boolean on = !prefs.getBoolean("backDrums", true);
+            prefs.edit().putBoolean("backDrums", on).apply();
+            if (DRUMS.backing != null && !DRUMS.following()) DRUMS.mode = on ? Drums.DRUMS : Drums.OFF;
+            showBacking();
+            showTools();
+        }));
+        boolean playing = DRUMS.backing != null;
+        ((Button) findViewById(R.id.backPlay)).setText(playing ? "■ Zastaviť" : "▶ Hrať");
+        ((TextView) findViewById(R.id.backText)).setText(playing
+                ? "Hrá v tempe " + bpm + ". Ťuknutím na akord ho zmeníte. Stupnica k tomu ukáže, čo sa hodí do sóla – zelené sú tóny práve hraného akordu."
+                : "Vyberte postup a tóninu, potom Hrať. Štýl bicích a tempo nastavíte podržaním 🥁 a ♩. Sprievod sedí aj s looperom.");
+        backingTick();
+    }
+
+    /** Zvýrazní práve hraný akord (aj na hmatníku stupnice). */
+    void backingTick() {
+        ui.removeCallbacks(backingTick);
+        Backing b = DRUMS.backing;
+        int now = b != null ? DRUMS.chordNow() : -1;
+        LinearLayout chords = findViewById(R.id.backChords);
+        for (int i = 0; i < chords.getChildCount(); i++) {
+            View c = chords.getChildAt(i);
+            if (c.getTag() != null) c.setBackgroundResource(("chord" + now).equals(c.getTag()) ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+        }
+        ScaleView sv = findViewById(R.id.scaleView);
+        sv.setChord(now >= 0 ? Backing.tones(b.roots[now], b.kinds[now]) : new boolean[12]);
+        if (b != null && (backingOn || scaleOn)) ui.postDelayed(backingTick, 80);
+    }
+
+    void backingKeyDialog() {
+        String[] keys = new String[24];
+        for (int i = 0; i < 12; i++) {
+            keys[2 * i] = Scales.ROOTS[i] + " dur";
+            keys[2 * i + 1] = Scales.ROOTS[i] + " mol";
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Tónina sprievodu")
+                .setItems(keys, (x, which) -> {
+                    prefs.edit().putInt("backKey", which / 2).putBoolean("backMinor", which % 2 == 1).apply();
+                    backingChanged();
+                })
+                .show();
+    }
+
+    /** Zmena akordu v postupe (index -1 = pridať na koniec). */
+    void editChord(int index) {
+        int key = prefs.getInt("backKey", 4);
+        int[][] options = Backing.diatonic(prefs.getBoolean("backMinor", true));
+        List<String> names = new ArrayList<>();
+        for (int[] o : options) names.add(Backing.name(Math.floorMod(key + o[0], 12), o[1]));
+        if (index >= 0) names.add("Odstrániť");
+        new AlertDialog.Builder(this)
+                .setTitle(index < 0 ? "Pridať akord" : "Zmeniť akord")
+                .setItems(names.toArray(new String[0]), (x, which) -> {
+                    List<int[]> prog = new ArrayList<>(java.util.Arrays.asList(progression()));
+                    if (which >= options.length) {
+                        if (prog.size() > 1) prog.remove(index);
+                    } else if (index < 0) {
+                        prog.add(options[which]);
+                    } else {
+                        prog.set(index, options[which]);
+                    }
+                    prefs.edit().putString("backProg", Backing.encode(prog.toArray(new int[0][]))).putInt("backPreset", -1).apply();
+                    backingChanged();
+                })
+                .show();
+    }
+
     // ---- Ladička ----
+
+    /** Naladené struny (index 0 = 6. struna) a od kedy sa drží tón v ladení (ms), aby fajka nebola náhodná. */
+    final boolean[] tuned = new boolean[6];
+    long inTuneSince;
+    int inTuneString = -1;
 
     void setTuner(boolean on) {
         tunerOn = on;
         showTools();
         tunerPanel.setVisibility(on ? View.VISIBLE : View.GONE);
+        updatePanels();
         tunerView.clear();
         if (!on) {
             engine.tuner = null;
             return;
         }
+        java.util.Arrays.fill(tuned, false);
+        showTunings();
         tunerText.setText("Zahrajte jednu strunu.");
         Tuner t = new Tuner();
+        t.a4 = prefs.getInt("a4", 440);
         long[] lastSeen = {0};
-        t.listener = p -> ui.post(() -> {
+        t.listener = (p, db) -> ui.post(() -> {
             if (!tunerOn) return;
+            ((TextView) findViewById(R.id.tunerLevel)).setText(db < -55 ? "Signál: ticho – ladička nič nepočuje"
+                    : String.format(Locale.ROOT, "Signál: %.0f dB", db));
             long now = SystemClock.uptimeMillis();
             if (p == null) {
                 // Krátke výpadky (doznievanie) nemažú poslednú notu hneď.
                 if (now - lastSeen[0] > 1200) {
                     tunerView.clear();
-                    tunerText.setText("Zahrajte jednu strunu.");
+                    tunerText.setText(db < -55 ? "Zahrajte jednu strunu." : "Počujem zvuk, ale nie jasný tón – zahrajte jednu strunu.");
+                    inTuneString = -1;
                 }
                 return;
             }
             lastSeen[0] = now;
-            boolean ok = Math.abs(p.cents) < TunerView.OK;
-            tunerView.set(p.note(), p.cents);
-            tunerText.setText(String.format(Locale.ROOT, "%+.0f centov   %.1f Hz   %s", p.cents, p.hz,
-                    ok ? "naladené" : p.cents < 0 ? "pritiahnuť" : "povoliť"));
+            int[] strings = Tunings.strings(prefs.getInt("tuning", 0));
+            int s = Tunings.nearest(strings, p.exact);
+            double cents = s >= 0 ? (p.exact - strings[s]) * 100 : p.cents;
+            String name = s >= 0 ? Tunings.note(strings[s]) : p.note();
+            boolean ok = Math.abs(cents) < TunerView.OK;
+            tunerView.set(name, cents);
+            tunerText.setText(String.format(Locale.ROOT, "%s%+.0f centov   %.1f Hz   %s",
+                    s >= 0 ? (6 - s) + ". struna · " : "", cents, p.hz,
+                    ok ? "naladené" : cents < 0 ? "pritiahnuť" : "povoliť"));
+            // Struna je naladená, keď sa drží v tolerancii aspoň 0,4 s.
+            if (ok && s >= 0) {
+                if (inTuneString != s) {
+                    inTuneString = s;
+                    inTuneSince = now;
+                } else if (now - inTuneSince > 400 && !tuned[s]) {
+                    tuned[s] = true;
+                    showStrings();
+                }
+            } else {
+                inTuneString = -1;
+            }
+            highlightString(s);
         });
         engine.tuner = t;
+    }
+
+    /** Výber ladenia a komorného A. */
+    void showTunings() {
+        LinearLayout row = findViewById(R.id.tunings);
+        row.removeAllViews();
+        float d = getResources().getDisplayMetrics().density;
+        int current = prefs.getInt("tuning", 0);
+        for (int i = 0; i < Tunings.NAMES.length; i++) {
+            TextView c = new TextView(this);
+            c.setText(Tunings.NAMES[i]);
+            c.setGravity(Gravity.CENTER);
+            c.setPadding(Math.round(12 * d), 0, Math.round(12 * d), 0);
+            c.setBackgroundResource(i == current ? R.drawable.bg_chip_on : R.drawable.bg_chip);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(36 * d));
+            lp.rightMargin = Math.round(6 * d);
+            int tuning = i;
+            c.setOnClickListener(v -> {
+                prefs.edit().putInt("tuning", tuning).apply();
+                java.util.Arrays.fill(tuned, false);
+                showTunings();
+                if (scaleOn) showScale();
+            });
+            row.addView(c, lp);
+        }
+        TextView a4 = findViewById(R.id.a4);
+        a4.setText("A = " + prefs.getInt("a4", 440) + " Hz");
+        findViewById(R.id.a4Minus).setOnClickListener(v -> setA4(prefs.getInt("a4", 440) - 1));
+        findViewById(R.id.a4Plus).setOnClickListener(v -> setA4(prefs.getInt("a4", 440) + 1));
+        showStrings();
+    }
+
+    void setA4(int hz) {
+        hz = Math.max(430, Math.min(450, hz));
+        prefs.edit().putInt("a4", hz).apply();
+        Tuner t = engine.tuner;
+        if (t != null) t.a4 = hz;
+        ((TextView) findViewById(R.id.a4)).setText("A = " + hz + " Hz");
+    }
+
+    /** Struny ladenia; naladené sú zelené. */
+    void showStrings() {
+        LinearLayout row = findViewById(R.id.tunerStrings);
+        row.removeAllViews();
+        int[] strings = Tunings.strings(prefs.getInt("tuning", 0));
+        float d = getResources().getDisplayMetrics().density;
+        for (int i = 0; i < strings.length; i++) {
+            TextView c = new TextView(this);
+            c.setText(Tunings.note(strings[i]) + (tuned[i] ? " ✓" : ""));
+            c.setGravity(Gravity.CENTER);
+            c.setTextSize(13);
+            c.setBackgroundResource(R.drawable.bg_chip);
+            if (tuned[i]) {
+                c.setBackgroundTintList(ColorStateList.valueOf(0xFF43A047));
+                c.setTextColor(0xFFFFFFFF);
+            }
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, Math.round(34 * d), 1);
+            lp.rightMargin = Math.round(4 * d);
+            row.addView(c, lp);
+        }
+    }
+
+    /** Zvýrazní strunu, ktorá sa práve ladí. */
+    void highlightString(int s) {
+        LinearLayout row = findViewById(R.id.tunerStrings);
+        for (int i = 0; i < row.getChildCount(); i++) {
+            View c = row.getChildAt(i);
+            c.setAlpha(s < 0 || i == s ? 1f : 0.45f);
+        }
     }
 
     // ---- Možnosti riffu ----
@@ -2659,6 +3097,8 @@ public class MainActivity extends Activity {
         });
         items.add("Poznámka, tempo, tónina");
         actions.add(() -> editInfo(r));
+        items.add(r.info.tone.isEmpty() ? "🎛 Zvuk (ToneX)" : "🎛 Zvuk: " + r.info.tone);
+        actions.add(() -> toneDialog(r));
         items.add(r.info.song.isEmpty() ? "🎵 Zaradiť do piesne" : "🎵 Pieseň: " + r.info.song);
         actions.add(() -> songDialog(r));
         if (filter == SONGS && !r.info.song.isEmpty()) {
@@ -2669,6 +3109,8 @@ public class MainActivity extends Activity {
         }
         items.add("Premenovať");
         actions.add(() -> rename(r));
+        items.add("🎼 Stupnica a tónina" + (r.info.key.isEmpty() ? "" : " (" + r.info.key + ")"));
+        actions.add(() -> scaleFor(r));
         items.add(r.info.bpm > 0 ? "Zistiť tempo znova z hrania" : "Zistiť tempo z hrania");
         actions.add(() -> detectTempo(r, null));
         items.add("Poslať ako WAV (plná kvalita)");
@@ -2773,6 +3215,83 @@ public class MainActivity extends Activity {
                 + " Nových riffov: " + fresh + ". Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka "
                 + "„Riffy záloha“. Poznámky, tempo, piesne a značky sú uložené priamo v súboroch.");
         ((Button) findViewById(R.id.backupNew)).setText("Zálohovať nové (" + fresh + ")");
+    }
+
+    // ---- Zvuk pri riffe ----
+
+    /** Hlásenie po uložení; zvuk sa dá hneď zmeniť (nový riff dostane naposledy použitý). */
+    void savedNotice(String saved) {
+        String tone = prefs.getString("lastTone", "");
+        notice("Uložené: " + label(saved) + (tone.isEmpty() ? "" : " · 🎛 " + tone), "Zvuk", () -> {
+            for (Riff r : riffs) {
+                if (r.name.equals(saved)) {
+                    toneDialog(r);
+                    return;
+                }
+            }
+        });
+    }
+
+    /** Naposledy použité zvuky (najnovší prvý). */
+    List<String> recentTones() {
+        List<String> out = new ArrayList<>();
+        for (String t : prefs.getString("tones", "").split("\n")) if (!t.trim().isEmpty()) out.add(t.trim());
+        return out;
+    }
+
+    void rememberTone(String tone) {
+        List<String> list = recentTones();
+        list.removeIf(t -> t.equalsIgnoreCase(tone));
+        if (!tone.isEmpty()) list.add(0, tone);
+        while (list.size() > 8) list.remove(list.size() - 1);
+        prefs.edit().putString("tones", String.join("\n", list)).putString("lastTone", tone).apply();
+    }
+
+    /** Aký zvuk alebo preset z ToneX bol pri riffe; ten istý sa ponúkne pri ďalších nahrávkach. */
+    void toneDialog(Riff r) {
+        float d = getResources().getDisplayMetrics().density;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = Math.round(20 * d);
+        box.setPadding(pad, pad / 2, pad, 0);
+        EditText field = new EditText(this);
+        field.setHint("napr. Marshall crunch, preset 3");
+        field.setText(r.info.tone);
+        field.setSingleLine(true);
+        box.addView(field);
+        List<String> recent = recentTones();
+        if (!recent.isEmpty()) {
+            TextView label = new TextView(this);
+            label.setText("Naposledy použité");
+            label.setPadding(0, Math.round(10 * d), 0, Math.round(4 * d));
+            box.addView(label);
+            HorizontalScrollView scroll = new HorizontalScrollView(this);
+            LinearLayout row = new LinearLayout(this);
+            for (String t : recent) {
+                TextView c = new TextView(this);
+                c.setText(t);
+                c.setGravity(Gravity.CENTER);
+                c.setBackgroundResource(R.drawable.bg_chip);
+                c.setPadding(Math.round(12 * d), 0, Math.round(12 * d), 0);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(36 * d));
+                lp.rightMargin = Math.round(6 * d);
+                c.setOnClickListener(v -> field.setText(t));
+                row.addView(c, lp);
+            }
+            scroll.addView(row);
+            box.addView(scroll);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Zvuk (ToneX)")
+                .setView(box)
+                .setPositiveButton("Uložiť", (x, w) -> {
+                    r.info.tone = field.getText().toString().trim();
+                    rememberTone(r.info.tone);
+                    saveMeta(r);
+                    render();
+                })
+                .setNegativeButton("Zrušiť", null)
+                .show();
     }
 
     // ---- Piesne ----

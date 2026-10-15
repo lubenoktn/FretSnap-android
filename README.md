@@ -30,3 +30,7 @@ mono 48 kHz 16 bit.
 
 Návod pre používateľa je v aplikácii (? na hlavnej obrazovke, alebo Nastavenia → Návod);
 jeho text je v `app/src/main/assets/navod.html`. Pri zmene funkcií ho treba upraviť.
+
+Sprievod: basa `res/raw/b*.pcm` je zo [Growlybass](https://github.com/sfzinstruments/karoryfer.growlybass)
+(Karoryfer Samples, CC0), klavír `res/raw/p*.pcm` z [VCSL](https://github.com/sgossner/VCSL) – Kawai grand
+(Versilian Studios, CC0). Číslo v názve je MIDI tón; ostatné tóny sa dopočítajú posunutím výšky.

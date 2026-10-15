@@ -158,6 +158,7 @@ final class Drums {
                 s[i] = new short[0];
             }
         }
+        Backing.load(c);
         s[CLICK_HI] = click(1760);
         s[CLICK_LO] = click(1100);
         sounds = s;
@@ -194,6 +195,9 @@ final class Drums {
         /** Doby v takte metronómu. */
         volatile int clickBeats = 4;
         volatile float bpm = 100, volume = 0.8f;
+        /** Sprievod (basa, klávesy), alebo null. */
+        volatile Backing backing;
+        static final int BASS_TAG = 100, KEYS_TAG = 101;
         /** Poloha v dobách (0 = prvá doba prvého taktu; záporné = odpočet). */
         double beat;
         boolean countIn;
@@ -266,9 +270,10 @@ final class Drums {
                 }
                 return;
             }
-            if (mode == OFF) return;
-            if (mode == CLICK) {
-                play(step == 0 ? CLICK_HI : CLICK_LO, 1f);
+            Backing bk = backing;
+            if (mode == OFF || mode == CLICK) {
+                if (mode == CLICK) play(step == 0 ? CLICK_HI : CLICK_LO, 1f);
+                if (bk != null) accompany(bk, bar, step, p, false, false);
                 return;
             }
             Bar b = barFor(bar);
@@ -279,16 +284,43 @@ final class Drums {
                 }
                 if (v > 0) play(i, v);
             }
+            if (bk != null) accompany(bk, bar, step, p, true, b.hits[KICK][step] > 0);
+        }
+
+        /**
+         * Basa hrá základný tón akordu spolu s kopákom (bez bicích na 1. a 3. dobu), klávesy celý
+         * akord na začiatku taktu.
+         */
+        private void accompany(Backing bk, long bar, int step, int p, boolean drums, boolean kick) {
+            int ci = bk.chordAt(bar);
+            if (ci < 0) return;
+            int root = bk.roots[ci], kind = bk.kinds[ci];
+            boolean bassHit = drums ? kick || step == 0 : step % p == 0 && (step / p) % 2 == 0;
+            if (bk.bass && bassHit) play(Backing.bass(Backing.bassMidi(root)), 0.5f, BASS_TAG, true);
+            if (bk.keys && step == 0) {
+                for (int k = 0; k < voice.length; k++) {
+                    if (voice[k] != null && voiceSound[k] == KEYS_TAG) voiceFade[k] = voiceGain[k] / (RATE * 0.03f);
+                }
+                for (int m : Backing.voicing(root, kind)) play(Backing.key(m), 0.15f, KEYS_TAG, false);
+            }
         }
 
         private void play(int sound, float v) {
             // Nový úder na ten istý bubon (alebo zatvorený hi-hat na otvorený) stlmí predošlý, ako na skutočnej súprave.
             boolean damp = sound != CRASH && sound != RIDE && sound != OPEN;
-            for (int k = 0; k < voice.length; k++) {
-                if (voice[k] == null) continue;
-                if ((damp && voiceSound[k] == sound) || (sound == HAT && voiceSound[k] == OPEN)) {
-                    voiceFade[k] = voiceGain[k] / (RATE * 0.004f);
+            if (sound == HAT) {
+                for (int k = 0; k < voice.length; k++) {
+                    if (voice[k] != null && voiceSound[k] == OPEN) voiceFade[k] = voiceGain[k] / (RATE * 0.004f);
                 }
+            }
+            play(kit[sound], v * LEVEL[sound], sound, damp);
+        }
+
+        /** Spustí zvuk; damp = predošlý zvuk s tou istou značkou sa stlmí. */
+        private void play(short[] sample, float gain, int tag, boolean damp) {
+            if (sample == null || sample.length == 0) return;
+            for (int k = 0; k < voice.length; k++) {
+                if (voice[k] != null && damp && voiceSound[k] == tag) voiceFade[k] = voiceGain[k] / (RATE * 0.004f);
             }
             int free = 0;
             for (int k = 0; k < voice.length; k++) {
@@ -298,11 +330,10 @@ final class Drums {
                 }
                 if (voicePos[k] > voicePos[free]) free = k;
             }
-            if (kit[sound] == null || kit[sound].length == 0) return;
-            voice[free] = kit[sound];
+            voice[free] = sample;
             voicePos[free] = 0;
-            voiceSound[free] = sound;
-            voiceGain[free] = v * LEVEL[sound];
+            voiceSound[free] = tag;
+            voiceGain[free] = gain;
             voiceFade[free] = 0;
         }
 
@@ -352,6 +383,8 @@ final class Drums {
     private double anchorBeat, beatsPerFrame;
 
     volatile int style, fillBars = 8, mode = DRUMS, clickBeats = 4;
+    /** Sprievod k rytmu (len keď prehrávač hrá sám), alebo null. */
+    volatile Backing backing;
     volatile float bpm = 100, volume = 0.8f;
 
     /** Slučka loopera: mono 48 kHz, index 0 zaznie na rámci loopStart; null = žiadna. */
@@ -470,6 +503,14 @@ final class Drums {
         return anchorFrame + Math.round((b - anchorBeat) / beatsPerFrame);
     }
 
+    /** Ktorý akord sprievodu práve znie; -1, ak nehrá. */
+    int chordNow() {
+        Backing b = backing;
+        double beat = audibleBeat();
+        if (b == null || Double.isNaN(beat)) return -1;
+        return b.chordAt((long) Math.floor(beat / beatsPerBar()));
+    }
+
     int beatsPerBar() {
         Sequencer s = seq;
         return s == null ? 4 : s.beatsPerBar();
@@ -500,6 +541,7 @@ final class Drums {
                 s.mode = mode;
                 s.clickBeats = clickBeats;
                 Clock c = clock;
+                s.backing = c == null ? backing : null;
                 float speed = 1;
                 if (c != null) {
                     if (!c.playing()) {

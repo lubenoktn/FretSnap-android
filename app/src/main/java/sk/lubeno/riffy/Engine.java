@@ -221,7 +221,8 @@ final class Engine {
                 }
                 Source.peaks(buf, n, c.channels, peak);
                 Tuner t = tuner;
-                if (t != null) t.feed(buf, n, c.channels, c.rate);
+                // Skutočné vzorkovanie (ToneX ohlasuje iné, než posiela); inak by ladička ukazovala vedľa.
+                if (t != null) t.feed(buf, n, c.channels, c.finalRate());
                 Tap tp = tap;
                 if (tp != null) tp.onAudio(buf, n, c.channels, c.finalRate());
                 if (now - last > 80) {

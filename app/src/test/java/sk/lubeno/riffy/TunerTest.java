@@ -32,7 +32,7 @@ public class TunerTest {
         expect(110.0, "A2");
         expect(146.83, "D3");
         expect(196.0, "G3");
-        expect(246.94, "B3");
+        expect(246.94, "H3");
         expect(329.63, "E4");
     }
 
@@ -58,12 +58,32 @@ public class TunerTest {
     public void prudVzoriek() {
         Tuner t = new Tuner();
         Tuner.Pitch[] got = new Tuner.Pitch[1];
-        t.listener = p -> got[0] = p;
+        t.listener = (p, db) -> got[0] = p;
         float[] x = tone(110, 44100, 0.5);
         int[] s = new int[x.length * 2];
         for (int i = 0; i < x.length; i++) s[2 * i] = s[2 * i + 1] = (int) (x[i] * Integer.MAX_VALUE);
         t.feed(s, s.length, 2, 44100);
         assertNotNull(got[0]);
         assertEquals("A2", got[0].note());
+    }
+
+    @Test
+    public void strunaPodlaLadenia() {
+        int[] dropD = Tunings.strings(1);
+        // D2 o 10 centov nižšie: 6. struna v Drop D
+        Tuner.Pitch p = new Tuner.Pitch(73.42 * Math.pow(2, -10 / 1200.0));
+        assertEquals(0, Tunings.nearest(dropD, p.exact));
+        assertEquals(-10, (p.exact - dropD[0]) * 100, 1);
+        // V štandarde je E2 o 2 poltóny vyššie: stále 6. struna, ladička povie „pritiahnuť“
+        assertEquals(0, Tunings.nearest(Tunings.strings(0), p.exact));
+        assertEquals(-1, Tunings.nearest(Tunings.strings(0), 30));
+    }
+
+    @Test
+    public void komorneA() {
+        Tuner.Pitch p = new Tuner.Pitch(442, 442);
+        assertEquals("A4", p.note());
+        assertEquals(0, p.cents, 0.01);
+        assertEquals(8, new Tuner.Pitch(442, 440).cents, 0.5);
     }
 }

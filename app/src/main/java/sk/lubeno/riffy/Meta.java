@@ -30,12 +30,14 @@ final class Meta {
         boolean aligned;
         /** Pieseň a časť (napr. „Sloha“), poradie v piesni. */
         String song = "", part = "";
+        /** Zvuk/preset z ToneX, s ktorým sa hralo. */
+        String tone = "";
         int order;
         /** Značky v nahrávke (ms), vzostupne. */
         java.util.List<Integer> markers = new java.util.ArrayList<>();
 
         boolean empty() {
-            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite && drums.isEmpty() && song.isEmpty()
+            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite && drums.isEmpty() && song.isEmpty() && tone.isEmpty()
                     && markers.isEmpty();
         }
     }
@@ -75,6 +77,7 @@ final class Meta {
         i.song = o.optString("song");
         i.part = o.optString("part");
         i.order = o.optInt("order");
+        i.tone = o.optString("tone");
         org.json.JSONArray m = o.optJSONArray("markers");
         if (m != null) for (int k = 0; k < m.length(); k++) i.markers.add(m.optInt(k));
         return i;
@@ -94,6 +97,7 @@ final class Meta {
             o.put("order", i.order);
         }
         if (!i.markers.isEmpty()) o.put("markers", new org.json.JSONArray(i.markers));
+        if (!i.tone.isEmpty()) o.put("tone", i.tone);
     }
 
     void put(String name, Info i) {
