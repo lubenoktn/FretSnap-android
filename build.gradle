@@ -2,7 +2,8 @@ plugins {
     id "com.android.application" version "9.4.1" apply false
 }
 
-// Projekt leží v priečinku synchronizovanom cez iCloud; priečinky s koncovkou .nosync iCloud vynecháva.
+// Projekt leží na ploche synchronizovanej cez iCloud, ktorý vo výstupoch zostavenia vytváral
+// kópie „(1)“ (aj v priečinkoch .nosync). Výstupy preto idú mimo plochy.
 allprojects {
-    layout.buildDirectory = file("build.nosync")
+    layout.buildDirectory = file("${System.getProperty("user.home")}/.cache/riffy-build/${project.name}")
 }

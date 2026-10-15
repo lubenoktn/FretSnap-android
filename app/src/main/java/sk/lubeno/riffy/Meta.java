@@ -74,6 +74,42 @@ final class Meta {
         save();
     }
 
+    boolean has(String name) {
+        return all.has(name);
+    }
+
+    /** Údaje do súboru WAV (vlastný blok), aby prežili preinštalovanie aj prenos do počítača. */
+    static byte[] toBytes(Info i) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("app", "Riffy");
+            o.put("note", i.note);
+            o.put("key", i.key);
+            o.put("bpm", i.bpm);
+            o.put("favorite", i.favorite);
+            return o.toString().getBytes(StandardCharsets.UTF_8);
+        } catch (JSONException e) {
+            return new byte[0];
+        }
+    }
+
+    /** Údaje zo súboru WAV; null, ak tam nie sú alebo nie sú od Riffy. */
+    static Info fromBytes(byte[] b) {
+        if (b == null) return null;
+        try {
+            JSONObject o = new JSONObject(new String(b, StandardCharsets.UTF_8));
+            if (!"Riffy".equals(o.optString("app"))) return null;
+            Info i = new Info();
+            i.note = o.optString("note");
+            i.key = o.optString("key");
+            i.bpm = o.optInt("bpm");
+            i.favorite = o.optBoolean("favorite");
+            return i;
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
     void rename(String from, String to) {
         Info i = get(from);
         all.remove(from);

@@ -17,7 +17,8 @@ inak sa nenainštaluje cez starú verziu.
 Zostavenie (Mac, Homebrew: openjdk@17, android-commandlinetools):
 
     export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
-    ./gradlew assembleDebug --project-cache-dir .gradle.nosync
-    cp app/build.nosync/outputs/apk/debug/app-debug.apk Riffy.apk
+    ./gradlew assembleRelease --project-cache-dir ~/.cache/riffy-gradle
+    cp ~/.cache/riffy-build/app/outputs/apk/release/app-release.apk Riffy.apk
 
-Výstupy zostavenia idú do priečinkov `*.nosync`, aby ich iCloud nesynchronizoval.
+Výstupy zostavenia idú do `~/.cache/riffy-build`, mimo plochy synchronizovanej cez iCloud
+(ten v nich vytváral kópie súborov „(1)“, ktoré pokazili zostavenie).

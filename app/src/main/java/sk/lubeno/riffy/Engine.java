@@ -247,7 +247,7 @@ final class Engine {
     /** Začne zapisovať prúd do súboru. */
     synchronized void startRecording(File f) throws IOException {
         if (source == null) throw new IOException("Vstup ešte nebeží.");
-        writer = new Wav.Writer(f, source.channels);
+        writer = new Wav.Writer(f, source.channels, source.rate);
         recordingSince = System.currentTimeMillis();
     }
 

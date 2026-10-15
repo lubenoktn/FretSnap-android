@@ -12,6 +12,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 
 /** Súbory WAV: zápis 24-bitových nahrávok, čítanie hlavičky a orezanie ticha. */
 final class Wav {
@@ -56,10 +59,19 @@ final class Wav {
         private byte[] bytes = new byte[0];
 
         Writer(File file, int channels) throws IOException {
+            this(file, channels, 0);
+        }
+
+        /**
+         * rate: predbežné vzorkovanie do hlavičky hneď na začiatku, aby sa dala nahrávka
+         * dokončiť aj po páde aplikácie ({@link #repair}).
+         */
+        Writer(File file, int channels, int rate) throws IOException {
             this.file = file;
             this.channels = channels;
+            this.rate = rate;
             out = new BufferedOutputStream(new FileOutputStream(file), 1 << 16);
-            out.write(new byte[HEADER]);
+            out.write(rate > 0 ? header(rate, channels, 24, 0) : new byte[HEADER]);
         }
 
         /** Zapíše n vzoriek (32-bitových, zvuk hore) ako 24 bitov. */
@@ -196,6 +208,167 @@ final class Wav {
                 out.write(buf, 0, n);
                 left -= n;
             }
+        }
+    }
+
+    // ---- Údaje aplikácie v súbore: vlastný blok za zvukovými dátami ----
+
+    static final String EXTRA = "RFYm";
+
+    private static ByteBuffer readAt(FileChannel ch, long pos, int n) throws IOException {
+        ByteBuffer b = ByteBuffer.allocate(n);
+        while (b.hasRemaining()) {
+            if (ch.read(b, pos + b.position()) < 0) throw new EOFException();
+        }
+        b.flip();
+        return b;
+    }
+
+    private static int le(ByteBuffer b, int at) {
+        return (b.get(at) & 0xff) | (b.get(at + 1) & 0xff) << 8 | (b.get(at + 2) & 0xff) << 16 | (b.get(at + 3) & 0xff) << 24;
+    }
+
+    /** Poloha bloku id (začiatok hlavičky bloku), alebo -1; pre "data" aj ďalej za ním. */
+    private static long[] find(FileChannel ch, String id) throws IOException {
+        long size = ch.size(), pos = 12, dataEnd = -1;
+        while (pos + 8 <= size) {
+            ByteBuffer h = readAt(ch, pos, 8);
+            String name = new String(new byte[]{h.get(0), h.get(1), h.get(2), h.get(3)}, StandardCharsets.US_ASCII);
+            long len = le(h, 4) & 0xffffffffL;
+            long next = pos + 8 + len + (len & 1);
+            if (name.equals("data")) dataEnd = Math.min(next, size);
+            if (name.equals(id)) return new long[]{pos, len, dataEnd};
+            pos = next;
+        }
+        return new long[]{-1, 0, dataEnd};
+    }
+
+    /** Prečíta vlastný blok aplikácie, alebo null, ak v súbore nie je. */
+    static byte[] readExtra(FileChannel ch) throws IOException {
+        long[] f = find(ch, EXTRA);
+        if (f[0] < 0 || f[1] > (1 << 20)) return null;
+        ByteBuffer b = readAt(ch, f[0] + 8, (int) f[1]);
+        byte[] out = new byte[b.remaining()];
+        b.get(out);
+        return out;
+    }
+
+    /**
+     * Zapíše vlastný blok za zvukové dáta (prípadný starší nahradí). Zvuk sa nemení;
+     * prehrávače bloky, ktorým nerozumejú, preskakujú.
+     */
+    static void writeExtra(FileChannel read, FileChannel write, byte[] payload) throws IOException {
+        long end = find(read, "data")[2];
+        if (end < 0) throw new IOException("Vo WAV chýbajú zvukové dáta.");
+        write.truncate(end);
+        ByteBuffer b = ByteBuffer.allocate(8 + payload.length + (payload.length & 1));
+        b.put(EXTRA.getBytes(StandardCharsets.US_ASCII));
+        b.putInt(Integer.reverseBytes(payload.length));
+        b.put(payload);
+        // Blok nepárnej dĺžky dostane vyrovnávací nulový bajt (pravidlo formátu RIFF).
+        b.position(b.capacity());
+        b.flip();
+        write.write(b, end);
+        ByteBuffer riff = ByteBuffer.allocate(4);
+        riff.putInt(Integer.reverseBytes((int) (end + b.limit() - 8)));
+        riff.flip();
+        write.write(riff, 4);
+    }
+
+    /**
+     * Dokončí nahrávku prerušenú pádom: hlavička má vzorkovanie a kanály, chýba len dĺžka.
+     * Vráti počet rámcov, alebo -1, ak súbor nie je použiteľný.
+     */
+    static long repair(File f) throws IOException {
+        Info info;
+        try (InputStream in = new FileInputStream(f)) {
+            info = read(in);
+        } catch (IOException e) {
+            return -1;
+        }
+        if (info.rate <= 0 || info.channels <= 0 || info.bits != 24) return -1;
+        long frames = (f.length() - HEADER) / info.frameBytes();
+        try (RandomAccessFile w = new RandomAccessFile(f, "rw")) {
+            w.setLength(HEADER + frames * info.frameBytes());
+            w.seek(0);
+            w.write(header(info.rate, info.channels, 24, frames * info.frameBytes()));
+        }
+        return frames;
+    }
+
+    // ---- Hlasitosť ----
+
+    /** Najvyššia hodnota a RMS (0 až 1) rámcov [from, to). */
+    static double[] analyze(File f, long from, long to) throws IOException {
+        try (InputStream in = new BufferedInputStream(new FileInputStream(f), 1 << 16)) {
+            Info info = read(in);
+            int fb = info.frameBytes(), sb = info.bits / 8;
+            double full = Math.pow(2, info.bits - 1), peak = 0, sum = 0;
+            long n = 0;
+            skipFully(in, from * fb);
+            byte[] frame = new byte[fb];
+            DataInputStream data = new DataInputStream(in);
+            for (long i = from; i < to; i++) {
+                data.readFully(frame);
+                for (int c = 0; c < info.channels; c++) {
+                    double v = (le(frame, c * sb, sb) << (32 - info.bits) >> (32 - info.bits)) / full;
+                    peak = Math.max(peak, Math.abs(v));
+                    sum += v * v;
+                    n++;
+                }
+            }
+            return new double[]{peak, n == 0 ? 0 : Math.sqrt(sum / n)};
+        }
+    }
+
+    /**
+     * Zosilnenie na podobnú hlasitosť riffov: cieľ RMS -18 dB, špička najviac -1 dB,
+     * zmena najviac o 24 dB hore a 12 dB dole.
+     */
+    static double loudnessGain(double peak, double rms) {
+        if (peak <= 0 || rms <= 0) return 1;
+        double g = Math.min(0.125 / rms, 0.891 / peak);
+        return Math.max(0.25, Math.min(16, g));
+    }
+
+    /**
+     * Skopíruje rámce [from, to) so zosilnením a jemným nábehom a dozvukom
+     * (aby na začiatku a konci nelúplo), so správnou hlavičkou.
+     */
+    static void copyProcessed(File f, long from, long to, double gain, int fadeIn, int fadeOut, OutputStream out)
+            throws IOException {
+        try (InputStream in = new BufferedInputStream(new FileInputStream(f), 1 << 16)) {
+            Info info = read(in);
+            int fb = info.frameBytes(), sb = info.bits / 8, shift = 32 - info.bits;
+            long max = (1L << (info.bits - 1)) - 1, min = -(1L << (info.bits - 1));
+            out.write(header(info.rate, info.channels, info.bits, (to - from) * fb));
+            skipFully(in, from * fb);
+            long total = to - from;
+            byte[] frame = new byte[fb];
+            DataInputStream data = new DataInputStream(in);
+            OutputStream buf = new BufferedOutputStream(out, 1 << 16);
+            for (long i = 0; i < total; i++) {
+                data.readFully(frame);
+                double g = gain;
+                if (i < fadeIn) g *= i / (double) fadeIn;
+                if (total - 1 - i < fadeOut) g *= (total - 1 - i) / (double) fadeOut;
+                for (int c = 0; c < info.channels; c++) {
+                    int at = c * sb;
+                    long v = Math.round((le(frame, at, sb) << shift >> shift) * g);
+                    v = Math.max(min, Math.min(max, v));
+                    for (int k = 0; k < sb; k++) frame[at + k] = (byte) (v >> (8 * k));
+                }
+                buf.write(frame);
+            }
+            buf.flush();
+        }
+    }
+
+    static void skipFully(InputStream in, long n) throws IOException {
+        while (n > 0) {
+            long s = in.skip(n);
+            if (s <= 0) throw new EOFException();
+            n -= s;
         }
     }
 }

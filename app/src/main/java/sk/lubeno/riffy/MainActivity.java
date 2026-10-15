@@ -57,16 +57,21 @@ import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.Normalizer;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -74,6 +79,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Nahrávanie riffov z USB zvukovej karty (ToneX Plug).
@@ -93,7 +100,7 @@ public class MainActivity extends Activity {
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
     static final Object COUNT_IN = new Object();
     static final int GREEN = 0xFF2E7D32, ORANGE = 0xFFEF6C00, GRAY = 0xFF757575, RED = 0xFFC62828, DARK = 0xFF323232;
-    static final Pattern AUTO_NAME = Pattern.compile("^Riff \\d{4}-\\d{2}-\\d{2} (\\d{2})\\.(\\d{2})\\.\\d{2}( spätne)?$");
+    static final Pattern AUTO_NAME = Pattern.compile("^Riff \\d{4}-\\d{2}-\\d{2} (\\d{2})\\.(\\d{2})\\.\\d{2}( spätne| obnovené)?$");
 
     final Handler ui = new Handler(Looper.getMainLooper());
     final Engine engine = Engine.get();
@@ -105,13 +112,14 @@ public class MainActivity extends Activity {
     View mainPage, settingsPage, listArea, tools, spacer, tunerPanel, playerPanel, playerMore, notice;
     TextView chip, banner, levelText, gainText, recHint, metroChip, countChip, filterAll, filterFav, empty;
     TextView tunerNote, tunerText, playerTitle, playerInfo, playerTime, loopText, playPause, playerExpand;
-    TextView noticeText, noticeAction, status, info;
+    TextView noticeText, noticeAction, status, info, diaryText, selectCount;
+    View filterRow, selectBar;
     Button rec, retro, tunerButton, test, usbInfo;
     LevelView level;
     SeekBar gainBar, tunerCents, playerSeek;
     ProgressBar playerProgress;
     Spinner inputs, sourceSpin, formatSpin, channelSpin, speed;
-    CheckBox trim, screenOn, metroPhone, loop;
+    CheckBox trim, screenOn, metroPhone, loop, normalize;
     EditText search;
     ListView list;
 
@@ -143,8 +151,14 @@ public class MainActivity extends Activity {
     static final String[] SPEED_NAMES = {"50 %", "60 %", "75 %", "90 %", "100 %", "125 %"};
     final Runnable progress = this::showProgress;
 
-    /** Riff čakajúci na zmazanie; kým beží „Vrátiť“, je len skrytý. */
-    Riff pendingDelete;
+    /** Riffy čakajúce na zmazanie; kým beží „Vrátiť“, sú len skryté. */
+    final List<Riff> pendingDelete = new ArrayList<>();
+    /** Hromadný výber (id riffov); prázdny = bežný režim. */
+    final Set<Long> selection = new LinkedHashSet<>();
+    /** Riffy, pri ktorých sa už hľadali údaje v súbore. */
+    final Set<Long> scanned = new HashSet<>();
+    Diary diary;
+    long lastLevelAt, diarySavedAt, diaryShownAt;
     final Runnable commitDelete = this::commitDelete;
     final Runnable hideNotice = () -> notice.setVisibility(View.GONE);
 
@@ -265,6 +279,8 @@ public class MainActivity extends Activity {
         sourceSpin = choice(R.id.source, SOURCE_NAMES, "source");
         formatSpin = choice(R.id.format, FORMAT_NAMES, "format");
         channelSpin = choice(R.id.channels, CHANNEL_NAMES, "channels");
+        normalize.setChecked(prefs.getBoolean("normalize", true));
+        normalize.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("normalize", on).apply());
         trim.setChecked(prefs.getBoolean("trim", true));
         trim.setOnCheckedChangeListener((b, on) -> prefs.edit().putBoolean("trim", on).apply());
         metroPhone.setChecked(prefs.getBoolean("metroPhone", false));
@@ -324,13 +340,27 @@ public class MainActivity extends Activity {
         list.setAdapter(adapter);
         list.setOnItemClickListener((p, v, pos, id) -> {
             Object r = rows.get(pos);
-            if (r instanceof Riff) play((Riff) r);
+            if (!(r instanceof Riff)) return;
+            if (selection.isEmpty()) play((Riff) r);
+            else toggleSelected((Riff) r);
         });
         list.setOnItemLongClickListener((p, v, pos, id) -> {
             Object r = rows.get(pos);
-            if (r instanceof Riff) options((Riff) r);
+            if (r instanceof Riff) toggleSelected((Riff) r);
             return true;
         });
+        findViewById(R.id.selectClose).setOnClickListener(v -> clearSelection());
+        findViewById(R.id.selectFav).setOnClickListener(v -> favoriteSelected());
+        findViewById(R.id.selectShare).setOnClickListener(v -> shareSelected());
+        findViewById(R.id.selectZip).setOnClickListener(v -> zipSelected());
+        findViewById(R.id.selectDelete).setOnClickListener(v -> {
+            List<Riff> chosen = selectedRiffs();
+            clearSelection();
+            delete(chosen);
+        });
+        diary = Diary.parse(prefs.getString("diary", null));
+        diaryText.setOnClickListener(v -> showDiary());
+        showDiaryLine();
         filterAll.setOnClickListener(v -> setFavorites(false));
         filterFav.setOnClickListener(v -> setFavorites(true));
         setFavorites(prefs.getBoolean("favorites", false));
@@ -354,6 +384,7 @@ public class MainActivity extends Activity {
         refreshInputs();
         askPermissions();
         loadRiffs();
+        if (!engine.recording()) IO.execute(this::recover);
     }
 
     void findViews() {
@@ -406,6 +437,11 @@ public class MainActivity extends Activity {
         trim = findViewById(R.id.trim);
         screenOn = findViewById(R.id.screenOn);
         metroPhone = findViewById(R.id.metroPhone);
+        normalize = findViewById(R.id.normalize);
+        diaryText = findViewById(R.id.diaryText);
+        filterRow = findViewById(R.id.filterRow);
+        selectBar = findViewById(R.id.selectBar);
+        selectCount = findViewById(R.id.selectCount);
     }
 
     @Override
@@ -438,6 +474,8 @@ public class MainActivity extends Activity {
     protected void onPause() {
         resumed = false;
         // Počas nahrávania beží vstup ďalej aj pri zhasnutej obrazovke (RecordingService).
+        saveDiary();
+        lastLevelAt = 0;
         if (!engine.recording() && !testing) {
             engine.stop();
             if (!counting) METRONOME.stop();
@@ -464,6 +502,7 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (settingsPage.getVisibility() == View.VISIBLE) showSettings(false);
+        else if (!selection.isEmpty()) clearSelection();
         else if (playerMore.getVisibility() == View.VISIBLE) expandPlayer(false);
         else if (search.getVisibility() == View.VISIBLE) toggleSearch();
         else super.onBackPressed();
@@ -521,6 +560,7 @@ public class MainActivity extends Activity {
         retro.setVisibility(recording ? View.INVISIBLE : View.VISIBLE);
         tunerButton.setVisibility(recording ? View.INVISIBLE : View.VISIBLE);
         tools.setVisibility(recording ? View.GONE : View.VISIBLE);
+        diaryText.setVisibility(recording ? View.GONE : View.VISIBLE);
         listArea.setVisibility(recording ? View.GONE : View.VISIBLE);
         spacer.setVisibility(recording ? View.VISIBLE : View.GONE);
         if (recording) stopPlaying();
@@ -883,6 +923,7 @@ public class MainActivity extends Activity {
         ui.post(() -> {
             level.set(top);
             levelText.setText(text);
+            heard(top);
         });
     }
 
@@ -1105,11 +1146,17 @@ public class MainActivity extends Activity {
      */
     String save(File temp, String name, int tempo) throws IOException {
         long[] range;
+        Wav.Info format;
         try (InputStream in = new FileInputStream(temp)) {
-            Wav.Info i = Wav.read(in);
-            range = new long[]{0, i.frames()};
+            format = Wav.read(in);
+            range = new long[]{0, format.frames()};
         }
         if (prefs.getBoolean("trim", true)) range = Wav.trimRange(temp, -50, 0.3);
+        double gain = 1;
+        if (prefs.getBoolean("normalize", true)) {
+            double[] a = Wav.analyze(temp, range[0], range[1]);
+            gain = Wav.loudnessGain(a[0], a[1]);
+        }
         ContentResolver cr = getContentResolver();
         ContentValues v = new ContentValues();
         v.put(MediaStore.Audio.Media.DISPLAY_NAME, name + ".wav");
@@ -1119,7 +1166,8 @@ public class MainActivity extends Activity {
         Uri uri = cr.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v);
         if (uri == null) throw new IOException("Nahrávku sa nepodarilo uložiť.");
         try (OutputStream out = cr.openOutputStream(uri)) {
-            Wav.copyRange(temp, range[0], range[1], out);
+            // Jemný nábeh 10 ms a dozvuk 50 ms, aby na začiatku a konci nelúplo.
+            Wav.copyProcessed(temp, range[0], range[1], gain, format.rate / 100, format.rate / 20, out);
         }
         v.clear();
         v.put(MediaStore.Audio.Media.IS_PENDING, 0);
@@ -1132,6 +1180,7 @@ public class MainActivity extends Activity {
             Meta.Info i = meta.get(saved);
             i.bpm = tempo;
             meta.put(saved, i);
+            embed(uri, i);
         }
         return saved;
     }
@@ -1350,6 +1399,7 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
         }
         render();
+        importMeta();
     }
 
     static String fold(String s) {
@@ -1363,7 +1413,7 @@ public class MainActivity extends Activity {
         String q = fold(search.getText().toString().trim());
         String lastDay = null;
         for (Riff r : riffs) {
-            if (pendingDelete != null && r.id == pendingDelete.id) continue;
+            if (isPending(r)) continue;
             if (onlyFavorites && !r.info.favorite) continue;
             if (!q.isEmpty() && !fold(label(r.name) + " " + r.name + " " + r.info.note + " " + r.info.key).contains(q)) continue;
             String day = day(r.added * 1000);
@@ -1398,7 +1448,7 @@ public class MainActivity extends Activity {
     static String label(String name) {
         Matcher m = AUTO_NAME.matcher(name);
         if (!m.matches()) return name;
-        return "Riff " + Integer.parseInt(m.group(1)) + ":" + m.group(2) + (m.group(3) != null ? " · spätne" : "");
+        return "Riff " + Integer.parseInt(m.group(1)) + ":" + m.group(2) + (m.group(3) != null ? " ·" + m.group(3) : "");
     }
 
     class RiffAdapter extends BaseAdapter {
@@ -1453,10 +1503,15 @@ public class MainActivity extends Activity {
             star.setTextColor(r.info.favorite ? 0xFFF9A825 : 0x99808080);
             star.setOnClickListener(x -> {
                 r.info.favorite = !r.info.favorite;
-                meta.put(r.name, r.info);
+                saveMeta(r);
                 render();
             });
-            v.findViewById(R.id.rowMenu).setOnClickListener(x -> options(r));
+            View menu = v.findViewById(R.id.rowMenu);
+            menu.setOnClickListener(x -> options(r));
+            boolean selecting = !selection.isEmpty(), chosen = selection.contains(r.id);
+            menu.setVisibility(selecting ? View.INVISIBLE : View.VISIBLE);
+            if (selecting) ((TextView) v.findViewById(R.id.rowPlay)).setText(chosen ? "☑" : "☐");
+            v.setBackgroundColor(chosen ? 0x331E88E5 : 0);
             return v;
         }
     }
@@ -1746,7 +1801,7 @@ public class MainActivity extends Activity {
                 .setItems(items, (d, which) -> {
                     if (which == 0) {
                         r.info.favorite = !r.info.favorite;
-                        meta.put(r.name, r.info);
+                        saveMeta(r);
                         render();
                     } else if (which == 1) editInfo(r);
                     else if (which == 2) rename(r);
@@ -1786,7 +1841,7 @@ public class MainActivity extends Activity {
                     } catch (NumberFormatException e) {
                         r.info.bpm = 0;
                     }
-                    meta.put(r.name, r.info);
+                    saveMeta(r);
                     render();
                 })
                 .setNegativeButton("Zrušiť", null)
@@ -1860,14 +1915,27 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Zmazanie s možnosťou vrátiť: riff sa najprv len skryje, zmaže sa po pár sekundách. */
+    boolean isPending(Riff r) {
+        for (Riff p : pendingDelete) if (p.id == r.id) return true;
+        return false;
+    }
+
     void delete(Riff r) {
+        List<Riff> one = new ArrayList<>();
+        one.add(r);
+        delete(one);
+    }
+
+    /** Zmazanie s možnosťou vrátiť: riffy sa najprv len skryjú, zmažú sa po pár sekundách. */
+    void delete(List<Riff> items) {
+        if (items.isEmpty()) return;
         commitDelete();
-        if (r.id == playing) stopPlaying();
-        pendingDelete = r;
+        for (Riff r : items) if (r.id == playing) stopPlaying();
+        pendingDelete.addAll(items);
         render();
-        notice("Zmazané: " + label(r.name), "Vrátiť", () -> {
-            pendingDelete = null;
+        String what = items.size() == 1 ? label(items.get(0).name) : items.size() + " riffov";
+        notice("Zmazané: " + what, "Vrátiť", () -> {
+            pendingDelete.clear();
             ui.removeCallbacks(commitDelete);
             render();
         });
@@ -1876,29 +1944,269 @@ public class MainActivity extends Activity {
     }
 
     void commitDelete() {
-        Riff r = pendingDelete;
-        if (r == null) return;
-        pendingDelete = null;
+        if (pendingDelete.isEmpty()) return;
+        List<Riff> items = new ArrayList<>(pendingDelete);
+        pendingDelete.clear();
         ui.removeCallbacks(commitDelete);
-        try {
-            getContentResolver().delete(r.uri(), null, null);
-            meta.remove(r.name);
-            loadRiffs();
-        } catch (SecurityException e) {
-            // Nahrávka z predošlej inštalácie: Android si vypýta súhlas sám.
+        List<Uri> foreign = new ArrayList<>();
+        for (Riff r : items) {
             try {
-                if (Build.VERSION.SDK_INT >= 30) {
-                    startIntentSenderForResult(MediaStore.createDeleteRequest(getContentResolver(),
-                            List.of(r.uri())).getIntentSender(), ASK_DELETE, null, 0, 0, 0);
-                } else if (e instanceof RecoverableSecurityException) {
-                    startIntentSenderForResult(((RecoverableSecurityException) e).getUserAction()
-                            .getActionIntent().getIntentSender(), ASK_DELETE, null, 0, 0, 0);
-                }
-            } catch (Exception ignored) {
-                notice("Nahrávka sa nedá zmazať.", null, null);
-                loadRiffs();
+                getContentResolver().delete(r.uri(), null, null);
+                meta.remove(r.name);
+            } catch (SecurityException e) {
+                // Nahrávka z predošlej inštalácie: Android si vypýta súhlas sám.
+                foreign.add(r.uri());
             }
         }
+        if (!foreign.isEmpty() && Build.VERSION.SDK_INT >= 30) {
+            try {
+                startIntentSenderForResult(MediaStore.createDeleteRequest(getContentResolver(), foreign)
+                        .getIntentSender(), ASK_DELETE, null, 0, 0, 0);
+            } catch (Exception e) {
+                notice("Niektoré nahrávky sa nedajú zmazať.", null, null);
+            }
+        }
+        loadRiffs();
+    }
+
+    // ---- Hromadný výber ----
+
+    void toggleSelected(Riff r) {
+        if (!selection.remove(r.id)) selection.add(r.id);
+        showSelection();
+    }
+
+    void clearSelection() {
+        selection.clear();
+        showSelection();
+    }
+
+    List<Riff> selectedRiffs() {
+        List<Riff> out = new ArrayList<>();
+        for (Riff r : riffs) if (selection.contains(r.id)) out.add(r);
+        return out;
+    }
+
+    void showSelection() {
+        boolean on = !selection.isEmpty();
+        selectBar.setVisibility(on ? View.VISIBLE : View.GONE);
+        filterRow.setVisibility(on ? View.GONE : View.VISIBLE);
+        int n = selection.size();
+        selectCount.setText(n == 1 ? "1 vybraný" : n >= 2 && n <= 4 ? n + " vybrané" : n + " vybraných");
+        adapter.notifyDataSetChanged();
+    }
+
+    /** Ak sú všetky vybrané obľúbené, hviezdička sa im zruší; inak sa pridá všetkým. */
+    void favoriteSelected() {
+        List<Riff> chosen = selectedRiffs();
+        boolean all = true;
+        for (Riff r : chosen) all &= r.info.favorite;
+        for (Riff r : chosen) {
+            r.info.favorite = !all;
+            saveMeta(r);
+        }
+        clearSelection();
+        render();
+    }
+
+    void shareSelected() {
+        ArrayList<Uri> uris = new ArrayList<>();
+        for (Riff r : selectedRiffs()) uris.add(r.uri());
+        if (uris.isEmpty()) return;
+        Intent send = new Intent(Intent.ACTION_SEND_MULTIPLE);
+        send.setType("audio/wav");
+        send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(Intent.createChooser(send, uris.size() + " riffov"));
+        clearSelection();
+    }
+
+    /** Meno súboru v ZIP: bez diakritiky a znakov, ktoré niektoré systémy nedovolia. */
+    static String fileName(String label) {
+        String plain = Normalizer.normalize(label, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        return plain.replace(":", ".").replace(" · ", " ").replaceAll("[/\\\\?*\"<>|]", "-");
+    }
+
+    /** Vybrané riffy do jedného ZIP (v Stiahnutých/Riffy), aj s poznámkami, a ponúknuť na poslanie. */
+    void zipSelected() {
+        List<Riff> chosen = selectedRiffs();
+        clearSelection();
+        if (chosen.isEmpty()) return;
+        notice("Pripravujem ZIP…", null, null);
+        IO.execute(() -> {
+            try {
+                ContentResolver cr = getContentResolver();
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.Downloads.DISPLAY_NAME, "Riffy " + DateFormat.format("yyyy-MM-dd HH.mm", new Date()) + ".zip");
+                v.put(MediaStore.Downloads.MIME_TYPE, "application/zip");
+                v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Riffy/");
+                v.put(MediaStore.Downloads.IS_PENDING, 1);
+                Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) throw new IOException("ZIP sa nepodarilo vytvoriť.");
+                StringBuilder notes = new StringBuilder();
+                Set<String> used = new HashSet<>();
+                try (ZipOutputStream z = new ZipOutputStream(new BufferedOutputStream(cr.openOutputStream(uri), 1 << 16))) {
+                    z.setLevel(1);
+                    byte[] buf = new byte[65536];
+                    for (Riff r : chosen) {
+                        String base = fileName(r.name.equals(label(r.name)) ? r.name
+                                : DateFormat.format("yyyy-MM-dd", new Date(r.added * 1000)) + " " + label(r.name));
+                        String file = base + ".wav";
+                        for (int k = 2; !used.add(file); k++) file = base + " (" + k + ").wav";
+                        z.putNextEntry(new ZipEntry(file));
+                        try (InputStream in = cr.openInputStream(r.uri())) {
+                            int n;
+                            while ((n = in.read(buf)) > 0) z.write(buf, 0, n);
+                        }
+                        z.closeEntry();
+                        if (!r.info.empty()) {
+                            notes.append(file).append(":");
+                            if (r.info.favorite) notes.append(" ★");
+                            if (r.info.bpm > 0) notes.append(" ").append(r.info.bpm).append(" BPM");
+                            if (!r.info.key.isEmpty()) notes.append(" ").append(r.info.key);
+                            if (!r.info.note.isEmpty()) notes.append(" – ").append(r.info.note);
+                            notes.append("\n");
+                        }
+                    }
+                    if (notes.length() > 0) {
+                        z.putNextEntry(new ZipEntry("poznamky.txt"));
+                        z.write(notes.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        z.closeEntry();
+                    }
+                }
+                v.clear();
+                v.put(MediaStore.Downloads.IS_PENDING, 0);
+                cr.update(uri, v, null, null);
+                ui.post(() -> share(uri, "application/zip", chosen.size() + " riffov"));
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                ui.post(() -> notice("ZIP sa nepodaril: " + msg, null, null));
+            }
+        });
+    }
+
+    // ---- Údaje v súboroch a záchrana nahrávok ----
+
+    /** Uloží údaje riffu do aplikácie aj do jeho súboru WAV. */
+    void saveMeta(Riff r) {
+        meta.put(r.name, r.info);
+        Uri uri = r.uri();
+        Meta.Info copy = r.info;
+        IO.execute(() -> embed(uri, copy));
+    }
+
+    /** Zapíše údaje do súboru; pri nahrávke z predošlej inštalácie to Android nedovolí, vtedy ostanú len v aplikácii. */
+    void embed(Uri uri, Meta.Info info) {
+        try (android.os.ParcelFileDescriptor fd = getContentResolver().openFileDescriptor(uri, "rw");
+             FileInputStream in = new FileInputStream(fd.getFileDescriptor());
+             FileOutputStream out = new FileOutputStream(fd.getFileDescriptor())) {
+            Wav.writeExtra(in.getChannel(), out.getChannel(), Meta.toBytes(info));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Riffom, ktoré aplikácia nepozná (napr. po preinštalovaní), načíta údaje z ich súborov. */
+    void importMeta() {
+        List<Riff> unknown = new ArrayList<>();
+        for (Riff r : riffs) if (!meta.has(r.name) && scanned.add(r.id)) unknown.add(r);
+        if (unknown.isEmpty()) return;
+        IO.execute(() -> {
+            boolean found = false;
+            for (Riff r : unknown) {
+                try (android.os.ParcelFileDescriptor fd = getContentResolver().openFileDescriptor(r.uri(), "r");
+                     FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
+                    Meta.Info i = Meta.fromBytes(Wav.readExtra(in.getChannel()));
+                    if (i != null && !i.empty()) {
+                        meta.put(r.name, i);
+                        found = true;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (found) ui.post(this::loadRiffs);
+        });
+    }
+
+    /** Nahrávky prerušené pádom aplikácie (zostali v dočasnom priečinku) dokončí a uloží. */
+    void recover() {
+        File[] files = getCacheDir().listFiles();
+        if (files == null) return;
+        int saved = 0;
+        for (File f : files) {
+            String n = f.getName();
+            if (n.startsWith("spatne-") || n.startsWith("zdielanie")) {
+                f.delete();
+                continue;
+            }
+            if (!n.startsWith("nahravka-") || !n.endsWith(".wav")) continue;
+            try {
+                long frames = Wav.repair(f);
+                long started = Long.parseLong(n.substring(9, n.length() - 4));
+                if (frames > 22050) {
+                    save(f, "Riff " + DateFormat.format("yyyy-MM-dd HH.mm.ss", new Date(started)) + " obnovené", 0);
+                    saved++;
+                }
+            } catch (Exception ignored) {
+            }
+            f.delete();
+        }
+        if (saved > 0) {
+            int count = saved;
+            ui.post(() -> {
+                notice(count == 1 ? "Obnovená prerušená nahrávka." : "Obnovené prerušené nahrávky: " + count, null, null);
+                loadRiffs();
+            });
+        }
+    }
+
+    // ---- Denník ----
+
+    /** Volá sa s každou úrovňou zo vstupu; čas, keď ide signál (nad -45 dB), sa zapíše do denníka. */
+    void heard(int peak) {
+        long now = SystemClock.uptimeMillis();
+        long dt = lastLevelAt == 0 ? 0 : Math.min(now - lastLevelAt, 300);
+        lastLevelAt = now;
+        if (peak > 184) diary.add(LocalDate.now(), dt);
+        if (now - diarySavedAt > 15000) saveDiary();
+        if (now - diaryShownAt > 1000) showDiaryLine();
+    }
+
+    void saveDiary() {
+        diarySavedAt = SystemClock.uptimeMillis();
+        prefs.edit().putString("diary", diary.format()).apply();
+    }
+
+    void showDiaryLine() {
+        diaryShownAt = SystemClock.uptimeMillis();
+        LocalDate today = LocalDate.now();
+        int streak = diary.streak(today);
+        diaryText.setText("Dnes hrané " + Diary.minutes(diary.on(today))
+                + (streak >= 2 ? "  ·  " + streak + " dni po sebe" : "") + "  ›");
+    }
+
+    void showDiary() {
+        LocalDate today = LocalDate.now();
+        DateTimeFormatter f = DateTimeFormatter.ofPattern("EEE d. M.", new Locale("sk"));
+        long max = 1;
+        for (int i = 0; i < 14; i++) max = Math.max(max, diary.on(today.minusDays(i)));
+        StringBuilder s = new StringBuilder();
+        s.append("Tento týždeň: ").append(Diary.minutes(diary.week(today))).append("\n");
+        s.append("Spolu: ").append(Diary.minutes(diary.total())).append("\n");
+        int streak = diary.streak(today);
+        s.append("Dní po sebe: ").append(streak).append("\n\n");
+        for (int i = 0; i < 14; i++) {
+            LocalDate d = today.minusDays(i);
+            long ms = diary.on(d);
+            int bar = (int) Math.round(12.0 * ms / max);
+            s.append(i == 0 ? "dnes" : f.format(d)).append("   ");
+            for (int k = 0; k < bar; k++) s.append('▇');
+            s.append(ms > 0 ? "  " + Diary.minutes(ms) : "  –").append("\n");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Denník hrania")
+                .setMessage(s.toString())
+                .setPositiveButton("Zavrieť", null)
+                .show();
     }
 
     @Override
