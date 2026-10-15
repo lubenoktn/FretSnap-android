@@ -277,6 +277,15 @@
                     android:text="ZIP" />
 
                 <TextView
+                    android:id="@+id/selectTest"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:gravity="center"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp"
+                    android:text="Na test" />
+
+                <TextView
                     android:id="@+id/selectDelete"
                     android:layout_width="wrap_content"
                     android:layout_height="44dp"

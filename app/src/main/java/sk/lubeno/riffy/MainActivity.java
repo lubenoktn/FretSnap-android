@@ -353,6 +353,11 @@ public class MainActivity extends Activity {
         findViewById(R.id.selectFav).setOnClickListener(v -> favoriteSelected());
         findViewById(R.id.selectShare).setOnClickListener(v -> shareSelected());
         findViewById(R.id.selectZip).setOnClickListener(v -> zipSelected());
+        findViewById(R.id.selectTest).setOnClickListener(v -> {
+            List<Riff> chosen = selectedRiffs();
+            clearSelection();
+            sendForTest(chosen);
+        });
         findViewById(R.id.selectDelete).setOnClickListener(v -> {
             List<Riff> chosen = selectedRiffs();
             clearSelection();
@@ -1795,7 +1800,7 @@ public class MainActivity extends Activity {
     void options(Riff r) {
         String[] items = {r.info.favorite ? "☆ Odobrať z obľúbených" : "★ Pridať k obľúbeným",
                 "Poznámka, tempo, tónina", "Premenovať", "Poslať ako WAV (plná kvalita)",
-                "Poslať ako M4A (menší súbor)", "Zmazať"};
+                "Poslať ako M4A (menší súbor)", "Poslať na test (Disk)", "Zmazať"};
         new AlertDialog.Builder(this)
                 .setTitle(label(r.name))
                 .setItems(items, (d, which) -> {
@@ -1807,6 +1812,7 @@ public class MainActivity extends Activity {
                     else if (which == 2) rename(r);
                     else if (which == 3) share(r.uri(), "audio/wav", label(r.name));
                     else if (which == 4) shareM4a(r);
+                    else if (which == 5) sendForTest(java.util.Collections.singletonList(r));
                     else delete(r);
                 })
                 .show();
@@ -2083,6 +2089,74 @@ public class MainActivity extends Activity {
                 ui.post(() -> notice("ZIP sa nepodaril: " + msg, null, null));
             }
         });
+    }
+
+    static final String DRIVE = "com.google.android.apps.docs";
+
+    /**
+     * Riffy na skúšku (napr. tabulatúry) rovno do aplikácie Disk; spolu s nimi nepovinný text,
+     * čo sa naozaj hralo, aby sa dal výsledok porovnať.
+     */
+    void sendForTest(List<Riff> chosen) {
+        if (chosen.isEmpty()) return;
+        EditText played = new EditText(this);
+        played.setHint("Napr. pražce alebo tabulatúra (nepovinné)");
+        played.setMinLines(3);
+        played.setGravity(Gravity.TOP);
+        int pad = Math.round(20 * getResources().getDisplayMetrics().density);
+        LinearLayout box = new LinearLayout(this);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(played, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        new AlertDialog.Builder(this)
+                .setTitle("Čo ste hrali?")
+                .setMessage("Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka Riffy.")
+                .setView(box)
+                .setPositiveButton("Poslať", (d, w) -> IO.execute(() -> {
+                    ArrayList<Uri> uris = new ArrayList<>();
+                    for (Riff r : chosen) uris.add(r.uri());
+                    String text = played.getText().toString().trim();
+                    if (!text.isEmpty()) {
+                        try {
+                            uris.add(testNote(chosen, text));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    ui.post(() -> {
+                        Intent send = new Intent(Intent.ACTION_SEND_MULTIPLE);
+                        send.setType("*/*");
+                        send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+                        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        try {
+                            startActivity(new Intent(send).setPackage(DRIVE));
+                        } catch (android.content.ActivityNotFoundException e) {
+                            // Bez aplikácie Disk: bežná ponuka zdieľania.
+                            startActivity(Intent.createChooser(send, "Poslať na test"));
+                        }
+                    });
+                }))
+                .setNegativeButton("Zrušiť", null)
+                .show();
+    }
+
+    /** Textový súbor (v Stiahnutých/Riffy) s tým, čo sa hralo, pomenovaný podľa riffu. */
+    Uri testNote(List<Riff> chosen, String text) throws IOException {
+        Riff first = chosen.get(0);
+        String base = fileName(DateFormat.format("yyyy-MM-dd", new Date(first.added * 1000)) + " " + label(first.name));
+        StringBuilder body = new StringBuilder();
+        for (Riff r : chosen) body.append("Riff: ").append(r.name).append(".wav\n");
+        body.append("Čo som hral:\n").append(text).append("\n");
+        ContentResolver cr = getContentResolver();
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.Downloads.DISPLAY_NAME, base + " - co som hral.txt");
+        v.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
+        v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Riffy/");
+        Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+        if (uri == null) throw new IOException("Text sa nepodarilo uložiť.");
+        try (OutputStream out = cr.openOutputStream(uri)) {
+            out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return uri;
     }
 
     // ---- Údaje v súboroch a záchrana nahrávok ----

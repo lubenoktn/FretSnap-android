@@ -15,6 +15,11 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
+    <!-- Aby aplikácia videla Disk (posielanie riffov na test). -->
+    <queries>
+        <package android:name="com.google.android.apps.docs" />
+    </queries>
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="Riffy"
