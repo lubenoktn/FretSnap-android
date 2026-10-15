@@ -1,15 +1,16 @@
-# Riffy
+# FretSnap
 
 Android aplikácia na nahrávanie riffov z USB zvukovej karty (ToneX Plug). ToneX číta priamo
 cez USB vlastným ovládačom (zvukový systém Androidu ho na niektorých telefónoch nepustí).
-Nahrávky ukladá ako 24-bitové WAV do Hudba/Riffy.
+Nahrávky ukladá ako 24-bitové WAV do Hudba/FretSnap.
+Do verzie 1.12 sa volala Riffy (meno už používa iná aplikácia).
 
-Stiahnuť poslednú verziu: https://github.com/lubenoktn/Riffy-android/releases/latest/download/Riffy.apk
+Stiahnuť poslednú verziu: https://github.com/lubenoktn/FretSnap-android/releases/latest/download/FretSnap.apk
 Aplikácia si nové vydania (GitHub Releases) kontroluje sama raz denne.
 
 Nové vydanie: zvýšiť `versionCode` a `versionName` v `app/build.gradle`, zostaviť a
 
-    gh release create v<verzia> Riffy.apk --title "Riffy <verzia>" --notes "…"
+    gh release create v<verzia> FretSnap.apk --title "FretSnap <verzia>" --notes "…"
 
 APK musí byť podpísané tým istým kľúčom (ladiaci kľúč tohto Macu, `~/.android/debug.keystore`),
 inak sa nenainštaluje cez starú verziu.
@@ -18,7 +19,7 @@ Zostavenie (Mac, Homebrew: openjdk@17, android-commandlinetools):
 
     export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
     ./gradlew assembleRelease --project-cache-dir ~/.cache/riffy-gradle
-    cp ~/.cache/riffy-build/app/outputs/apk/release/app-release.apk Riffy.apk
+    cp ~/.cache/riffy-build/app/outputs/apk/release/app-release.apk FretSnap.apk
 
 Výstupy zostavenia idú do `~/.cache/riffy-build`, mimo plochy synchronizovanej cez iCloud
 (ten v nich vytváral kópie súborov „(1)“, ktoré pokazili zostavenie).

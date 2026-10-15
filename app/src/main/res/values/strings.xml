@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="move_folder">Riffy is now called FretSnap. Allow moving your recordings to the Music/FretSnap folder.</string>
     <string name="input_interrupted">Input interrupted</string>
     <string name="input">Input</string>
     <string name="starting_up">Starting…</string>
@@ -84,7 +85,7 @@
     <string name="phone_line">Phone: %1$s %2$s, Android %3$s\n</string>
     <string name="usb_report_title">USB device report</string>
     <string name="send">Send</string>
-    <string name="usb_report_subject">Riffy – USB device report</string>
+    <string name="usb_report_subject">FretSnap – USB device report</string>
     <string name="send_report">Send report</string>
     <string name="test_not_started">did not start — %1$s</string>
     <string name="test_recorded_from">" (recorded from: %1$s)"</string>
@@ -100,7 +101,7 @@
     <string name="nothing_works">No setting delivered usable sound from the chosen input (louder than -60 dB).\n\n</string>
     <string name="test_result">Test result</string>
     <string name="send_result">Send result</string>
-    <string name="test_subject">Riffy – input test result</string>
+    <string name="test_subject">FretSnap – input test result</string>
     <string name="use">Use</string>
     <string name="empty_none">No riffs yet.\nRecord the first one with the big red button.</string>
     <string name="empty_fav">No favorite riffs.\nAdd one with the star next to a riff.</string>
@@ -193,7 +194,7 @@
     <string name="backup_never">Not backed up yet.</string>
     <string name="backup_last">Last backup: %1$s.</string>
     <string name="datetime_format">MMM d, yyyy H:mm</string>
-    <string name="backup_info">" New riffs: %1$d. Riffs are sent to the Drive app; save them to a folder “Riffy backup”. Notes, tempo, songs and markers are stored right inside the files."</string>
+    <string name="backup_info">" New riffs: %1$d. Riffs are sent to the Drive app; save them to a folder “FretSnap backup”. Notes, tempo, songs and markers are stored right inside the files."</string>
     <string name="backup_new">Back up new (%1$d)</string>
     <string name="saved_n">Saved: %1$s</string>
     <string name="tone">Tone</string>
@@ -230,7 +231,7 @@
     <string name="zip_failed">ZIP failed: %1$s</string>
     <string name="test_hint">e.g. frets or tab (optional)</string>
     <string name="what_played">What did you play?</string>
-    <string name="test_msg">The riffs are sent to the Drive app; save them to the Riffy folder.</string>
+    <string name="test_msg">The riffs are sent to the Drive app; save them to the FretSnap folder.</string>
     <string name="send_for_test">Send for testing</string>
     <string name="i_played">What I played:\n</string>
     <string name="played_file">" - what I played.txt"</string>
@@ -248,7 +249,7 @@
     <string name="version_n">Version %1$s</string>
     <string name="shared_folder">Shared</string>
     <string name="channel_recording">Recording</string>
-    <string name="notif_title">Riffy is recording</string>
+    <string name="notif_title">FretSnap is recording</string>
     <string name="notif_text">Tap to return to the app.</string>
     <string name="silence">silence</string>
     <string name="levels_lr">left %1$s, right %2$s</string>

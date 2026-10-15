@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="move_folder">Riffy sa teraz volá FretSnap. Povoľte presun nahrávok do priečinka Hudba/FretSnap.</string>
     <string name="input_interrupted">Vstup prerušený</string>
     <string name="input">Vstup</string>
     <string name="starting_up">Zapína sa…</string>
@@ -84,7 +85,7 @@
     <string name="phone_line">Telefón: %1$s %2$s, Android %3$s\n</string>
     <string name="usb_report_title">Popis USB zariadenia</string>
     <string name="send">Poslať</string>
-    <string name="usb_report_subject">Riffy – popis USB zariadenia</string>
+    <string name="usb_report_subject">FretSnap – popis USB zariadenia</string>
     <string name="send_report">Poslať popis</string>
     <string name="test_not_started">nespustilo sa — %1$s</string>
     <string name="test_recorded_from">" (nahrávalo z: %1$s)"</string>
@@ -100,7 +101,7 @@
     <string name="nothing_works">Zo žiadneho nastavenia neprišiel zo zvoleného vstupu použiteľný zvuk (hlasnejší než -60 dB).\n\n</string>
     <string name="test_result">Výsledok skúšky</string>
     <string name="send_result">Poslať výsledok</string>
-    <string name="test_subject">Riffy – výsledok skúšky vstupu</string>
+    <string name="test_subject">FretSnap – výsledok skúšky vstupu</string>
     <string name="use">Použiť</string>
     <string name="empty_none">Zatiaľ tu nie sú žiadne riffy.\nNahrajte prvý veľkým červeným tlačidlom.</string>
     <string name="empty_fav">Žiadne obľúbené riffy.\nHviezdičkou pri riffe ho pridáte.</string>
@@ -193,7 +194,7 @@
     <string name="backup_never">Zatiaľ nezálohované.</string>
     <string name="backup_last">Posledná záloha: %1$s.</string>
     <string name="datetime_format">d. M. yyyy H:mm</string>
-    <string name="backup_info">" Nových riffov: %1$d. Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka „Riffy záloha“. Poznámky, tempo, piesne a značky sú uložené priamo v súboroch."</string>
+    <string name="backup_info">" Nových riffov: %1$d. Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka „FretSnap záloha“. Poznámky, tempo, piesne a značky sú uložené priamo v súboroch."</string>
     <string name="backup_new">Zálohovať nové (%1$d)</string>
     <string name="saved_n">Uložené: %1$s</string>
     <string name="tone">Zvuk</string>
@@ -230,7 +231,7 @@
     <string name="zip_failed">ZIP sa nepodaril: %1$s</string>
     <string name="test_hint">Napr. pražce alebo tabulatúra (nepovinné)</string>
     <string name="what_played">Čo ste hrali?</string>
-    <string name="test_msg">Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka Riffy.</string>
+    <string name="test_msg">Riffy sa pošlú do aplikácie Disk; uložte ich do priečinka FretSnap.</string>
     <string name="send_for_test">Poslať na test</string>
     <string name="i_played">Čo som hral:\n</string>
     <string name="played_file">" - co som hral.txt"</string>
@@ -248,7 +249,7 @@
     <string name="version_n">Verzia %1$s</string>
     <string name="shared_folder">Zdieľané</string>
     <string name="channel_recording">Nahrávanie</string>
-    <string name="notif_title">Riffy nahráva</string>
+    <string name="notif_title">FretSnap nahráva</string>
     <string name="notif_text">Ťuknutím sa vrátite do aplikácie.</string>
     <string name="silence">ticho</string>
     <string name="levels_lr">ľavý %1$s, pravý %2$s</string>

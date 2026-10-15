@@ -122,7 +122,7 @@ final class Meta {
     static byte[] toBytes(Info i) {
         try {
             JSONObject o = new JSONObject();
-            o.put("app", "Riffy");
+            o.put("app", "FretSnap");
             write(o, i);
             return o.toString().getBytes(StandardCharsets.UTF_8);
         } catch (JSONException e) {
@@ -130,12 +130,13 @@ final class Meta {
         }
     }
 
-    /** Údaje zo súboru WAV; null, ak tam nie sú alebo nie sú od Riffy. */
+    /** Údaje zo súboru WAV; null, ak tam nie sú alebo nie sú od tejto aplikácie (aj z čias, keď sa volala Riffy). */
     static Info fromBytes(byte[] b) {
         if (b == null) return null;
         try {
             JSONObject o = new JSONObject(new String(b, StandardCharsets.UTF_8));
-            if (!"Riffy".equals(o.optString("app"))) return null;
+            String app = o.optString("app");
+            if (!"FretSnap".equals(app) && !"Riffy".equals(app)) return null;
             return read(o);
         } catch (JSONException e) {
             return null;

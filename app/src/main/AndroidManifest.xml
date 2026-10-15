@@ -22,7 +22,7 @@
 
     <application
         android:icon="@mipmap/ic_launcher"
-        android:label="Riffy"
+        android:label="FretSnap"
         android:theme="@style/Riffy">
         <activity
             android:name=".MainActivity"
@@ -34,7 +34,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Po pripojení ToneX sa Riffy ponúkne na otvorenie; s voľbou „vždy“ si telefón zapamätá povolenie. -->
+            <!-- Po pripojení ToneX sa FretSnap ponúkne na otvorenie; s voľbou „vždy“ si telefón zapamätá povolenie. -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>

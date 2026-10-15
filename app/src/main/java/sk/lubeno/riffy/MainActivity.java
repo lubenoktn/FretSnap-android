@@ -98,8 +98,10 @@ import java.util.zip.ZipOutputStream;
  * a nastavenia (vstup, voľby, diagnostika, aktualizácie).
  */
 public class MainActivity extends Activity {
-    static final String FOLDER = Environment.DIRECTORY_MUSIC + "/Riffy/";
-    static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2, ASK_RENAME = 3;
+    static final String FOLDER = Environment.DIRECTORY_MUSIC + "/FretSnap/";
+    /** Priečinok z čias, keď sa aplikácia volala Riffy; nahrávky sa z neho presúvajú do {@link #FOLDER}. */
+    static final String OLD_FOLDER = Environment.DIRECTORY_MUSIC + "/Riffy/";
+    static final int ASK_PERMISSIONS = 1, ASK_DELETE = 2, ASK_RENAME = 3, ASK_MOVE = 4;
     static final Drums DRUMS = new Drums();
     static final LoopStation LOOPER = new LoopStation(DRUMS);
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
@@ -498,6 +500,7 @@ public class MainActivity extends Activity {
         refreshInputs();
         askPermissions();
         loadRiffs();
+        if (!prefs.getBoolean("movedToFretSnap", false)) IO.execute(this::moveOldFolder);
         if (!engine.recording()) IO.execute(this::recover);
         if (saved != null && saved.getBoolean("settings")) showSettings(true);
     }
@@ -1633,7 +1636,7 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Uloží nahrávku do Hudba/Riffy, kde ju vidia aj iné aplikácie; podľa nastavenia oreže ticho.
+     * Uloží nahrávku do Hudba/FretSnap, kde ju vidia aj iné aplikácie; podľa nastavenia oreže ticho.
      * Vráti meno, pod ktorým sa uložila.
      */
     /**
@@ -1921,12 +1924,51 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Presunie nahrávky z Hudba/Riffy (aj podpriečinky) do Hudba/FretSnap. Nahrávky, ktoré aplikácii
+     * nepatria (napr. po preinštalovaní), smie presunúť až po súhlase; raz sa naň opýta. Čo sa
+     * presunúť nedá, ostane na mieste a zoznam to aj tak ukáže.
+     */
+    void moveOldFolder() {
+        java.util.ArrayList<Uri> denied = new java.util.ArrayList<>();
+        try (Cursor c = getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                new String[]{MediaStore.Audio.Media._ID, MediaStore.Audio.Media.RELATIVE_PATH},
+                MediaStore.Audio.Media.RELATIVE_PATH + " LIKE ?", new String[]{OLD_FOLDER + "%"}, null)) {
+            while (c != null && c.moveToNext()) {
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.Audio.Media.RELATIVE_PATH, FOLDER + c.getString(1).substring(OLD_FOLDER.length()));
+                Uri uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, c.getLong(0));
+                try {
+                    getContentResolver().update(uri, v, null, null);
+                } catch (Exception e) {
+                    denied.add(uri);
+                }
+            }
+        } catch (Exception e) {
+            return;
+        }
+        boolean ask = !denied.isEmpty() && !prefs.getBoolean("askedMove", false)
+                && Build.VERSION.SDK_INT >= 30;
+        if (denied.isEmpty() || !ask) prefs.edit().putBoolean("movedToFretSnap", true).apply();
+        runOnUiThread(() -> {
+            loadRiffs();
+            if (!ask || isFinishing() || Build.VERSION.SDK_INT < 30) return;
+            prefs.edit().putBoolean("askedMove", true).apply();
+            notice(getString(R.string.move_folder), null, null);
+            try {
+                startIntentSenderForResult(MediaStore.createWriteRequest(getContentResolver(), denied)
+                        .getIntentSender(), ASK_MOVE, null, 0, 0, 0);
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
     void loadRiffs() {
         riffs.clear();
         String[] cols = {MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATE_ADDED};
         try (Cursor c = getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cols,
-                MediaStore.Audio.Media.RELATIVE_PATH + "=?", new String[]{FOLDER},
+                MediaStore.Audio.Media.RELATIVE_PATH + " IN (?,?)", new String[]{FOLDER, OLD_FOLDER},
                 MediaStore.Audio.Media.DATE_ADDED + " DESC")) {
             while (c != null && c.moveToNext()) {
                 Riff r = new Riff();
@@ -3536,7 +3578,7 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Uloží M4A do Hudba/Riffy/Zdieľané (aby sa dal poslať) a vráti jeho adresu. */
+    /** Uloží M4A do Hudba/FretSnap/Zdieľané (aby sa dal poslať) a vráti jeho adresu. */
     Uri publishShared(File m4a, String name) throws IOException {
         ContentResolver cr = getContentResolver();
         ContentValues v = new ContentValues();
@@ -3657,7 +3699,7 @@ public class MainActivity extends Activity {
         startActivity(Intent.createChooser(send, title));
     }
 
-    /** Prevedie riff do M4A, uloží ho do Hudba/Riffy/Zdieľané a ponúkne na poslanie. */
+    /** Prevedie riff do M4A, uloží ho do Hudba/FretSnap/Zdieľané a ponúkne na poslanie. */
     void shareM4a(Riff r) {
         notice(getString(R.string.preparing_m4a), null, null);
         IO.execute(() -> {
@@ -3805,7 +3847,7 @@ public class MainActivity extends Activity {
         return plain.replace(":", ".").replace(" · ", " ").replaceAll("[/\\\\?*\"<>|]", "-");
     }
 
-    /** Vybrané riffy do jedného ZIP (v Stiahnutých/Riffy), aj s poznámkami, a ponúknuť na poslanie. */
+    /** Vybrané riffy do jedného ZIP (v Stiahnutých/FretSnap), aj s poznámkami, a ponúknuť na poslanie. */
     void zipSelected() {
         List<Riff> chosen = selectedRiffs();
         clearSelection();
@@ -3815,9 +3857,9 @@ public class MainActivity extends Activity {
             try {
                 ContentResolver cr = getContentResolver();
                 ContentValues v = new ContentValues();
-                v.put(MediaStore.Downloads.DISPLAY_NAME, "Riffy " + DateFormat.format("yyyy-MM-dd HH.mm", new Date()) + ".zip");
+                v.put(MediaStore.Downloads.DISPLAY_NAME, "FretSnap " + DateFormat.format("yyyy-MM-dd HH.mm", new Date()) + ".zip");
                 v.put(MediaStore.Downloads.MIME_TYPE, "application/zip");
-                v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Riffy/");
+                v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/FretSnap/");
                 v.put(MediaStore.Downloads.IS_PENDING, 1);
                 Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                 if (uri == null) throw new IOException(getString(R.string.zip_failed_create));
@@ -3911,7 +3953,7 @@ public class MainActivity extends Activity {
                 .show();
     }
 
-    /** Textový súbor (v Stiahnutých/Riffy) s tým, čo sa hralo, pomenovaný podľa riffu. */
+    /** Textový súbor (v Stiahnutých/FretSnap) s tým, čo sa hralo, pomenovaný podľa riffu. */
     Uri testNote(List<Riff> chosen, String text) throws IOException {
         Riff first = chosen.get(0);
         String base = fileName(DateFormat.format("yyyy-MM-dd", new Date(first.added * 1000)) + " " + label(first.name));
@@ -3922,7 +3964,7 @@ public class MainActivity extends Activity {
         ContentValues v = new ContentValues();
         v.put(MediaStore.Downloads.DISPLAY_NAME, base + getString(R.string.played_file));
         v.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
-        v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Riffy/");
+        v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/FretSnap/");
         Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
         if (uri == null) throw new IOException(getString(R.string.text_failed));
         try (OutputStream out = cr.openOutputStream(uri)) {
@@ -4058,6 +4100,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int code, int result, Intent data) {
         if (code == ASK_DELETE) loadRiffs();
+        if (code == ASK_MOVE) IO.execute(this::moveOldFolder);
         if (code == ASK_RENAME && renaming != null) {
             Riff r = renaming;
             renaming = null;

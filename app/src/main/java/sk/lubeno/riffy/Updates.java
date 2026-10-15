@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets;
  * posledné vydanie; ak je novšie, ponúkne stiahnuť APK cez prehliadač.
  */
 final class Updates {
-    static final String LATEST = "https://api.github.com/repos/lubenoktn/Riffy-android/releases/latest";
+    static final String LATEST = "https://api.github.com/repos/lubenoktn/FretSnap-android/releases/latest";
     static final long DAY = 24 * 60 * 60 * 1000L;
 
     private Updates() {
