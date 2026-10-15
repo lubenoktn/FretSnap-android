@@ -57,6 +57,45 @@ public class UsbAudioTest {
         assertEquals(0x140, a.packetSize);
     }
 
+    /** Výstup na slúchadlá so spätnou väzbou: nájde sa ako výstup, nie ako vstup. */
+    @Test
+    public void outputWithFeedback() {
+        byte[] raw = join(
+                desc(4, 0, 0, 0, 1, 1, 0x20, 0),
+                desc(0x24, 0x0A, 7, 3, 7, 0, 0),
+                desc(4, 1, 1, 2, 1, 2, 0x20, 0),
+                desc(0x24, 1, 2, 0, 1, 1, 0, 0, 0, 2, 3, 0, 0, 0, 0),
+                desc(0x24, 2, 1, 4, 24),
+                desc(5, 0x01, 0x05, 0x38, 0x00, 1),          // OUT, asynchrónny, 56 B
+                desc(5, 0x81, 0x11, 0x04, 0x00, 4),          // spätná väzba
+                desc(4, 3, 1, 1, 1, 2, 0x20, 0),
+                desc(0x24, 1, 5, 0, 1, 1, 0, 0, 0, 2, 3, 0, 0, 0, 0),
+                desc(0x24, 2, 1, 4, 24),
+                desc(5, 0x84, 0x05, 0x38, 0x00, 1));
+        UsbAudio.Info info = UsbAudio.parse(raw);
+        assertEquals(1, info.alts.size());
+        assertEquals(0x84, info.best().endpoint);
+        UsbAudio.Alt o = info.bestOut();
+        assertNotNull(o);
+        assertEquals(1, o.iface);
+        assertEquals(0x01, o.endpoint);
+        assertEquals(56, o.packetSize);
+        assertEquals(0x81, o.feedback);
+        assertEquals(4, o.feedbackPacket);
+        assertEquals(2, o.channels);
+        assertEquals(4, o.subslot);
+    }
+
+    /** 16-bitová vzorka do formátu zariadenia: 24 bit v štyroch bajtoch je zarovnaná hore. */
+    @Test
+    public void outputSamples() {
+        byte[] b = new byte[4];
+        assertEquals(4, UsbAudio.Direct.put(b, 0, 0x1234, 4));
+        assertEquals(0x12340000, (b[0] & 0xff) | (b[1] & 0xff) << 8 | (b[2] & 0xff) << 16 | (b[3] & 0xff) << 24);
+        assertEquals(3, UsbAudio.Direct.put(b, 0, -2, 3));
+        assertEquals(-512, ((b[0] & 0xff) | (b[1] & 0xff) << 8 | b[2] << 16));
+    }
+
     /** UAC1 s viacerými vzorkovaniami a vysokorýchlostným paketom (násobok v horných bitoch). */
     @Test
     public void uac1() {

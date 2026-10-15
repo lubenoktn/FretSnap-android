@@ -1,11 +1,7 @@
 package sk.lubeno.riffy;
 
-import android.media.AudioAttributes;
-import android.media.AudioDeviceInfo;
-import android.media.AudioFormat;
-import android.media.AudioTrack;
 
-/** Metronóm: krátke tóny cez AudioTrack, prvá doba taktu je vyššia. */
+/** Metronóm: krátke tóny, prvá doba taktu je vyššia. Hrá do {@link Output} (telefón alebo USB zariadenie). */
 final class Metronome {
     static final int RATE = 48000;
 
@@ -18,7 +14,7 @@ final class Metronome {
         return running;
     }
 
-    void start(AudioDeviceInfo out) {
+    void start(Output out) {
         stop();
         running = true;
         thread = new Thread(() -> loop(out), "metronom");
@@ -46,19 +42,7 @@ final class Metronome {
         return s;
     }
 
-    private void loop(AudioDeviceInfo out) {
-        int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        AudioTrack track = new AudioTrack.Builder()
-                .setAudioAttributes(new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                .setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
-                .setBufferSizeInBytes(Math.max(min, RATE / 20 * 2))
-                .setTransferMode(AudioTrack.MODE_STREAM).build();
-        if (out != null) track.setPreferredDevice(out);
-        track.play();
+    private void loop(Output track) {
         short[] high = click(1760), low = click(1100);
         short[] chunk = new short[RATE / 100];
         short[] sound = null;
@@ -76,12 +60,10 @@ final class Metronome {
                     }
                     chunk[i] = sound != null && soundPos < sound.length ? sound[soundPos++] : 0;
                 }
-                track.write(chunk, 0, chunk.length);
+                track.write(chunk, chunk.length);
             }
         } finally {
-            track.pause();
-            track.flush();
-            track.release();
+            track.close();
         }
     }
 }

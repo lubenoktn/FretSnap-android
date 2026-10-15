@@ -41,6 +41,11 @@ public class UsbAudio {
     }
     static native int nativeRead(long handle, byte[] out);
     static native void nativeClose(long handle);
+    static native int nativeOutStart(long handle, int endpoint, int packetMax, int packets, int frameBytes,
+                                     double nominal, int fbEndpoint, int fbPacket);
+    static native void nativeOutNominal(long handle, double nominal);
+    static native int nativeOutWrite(long handle, byte[] data, int n, int limit);
+    static native long[] nativeOutStats(long handle);
 
     static final int[] RATES = {44100, 48000, 88200, 96000, 176400, 192000};
 
@@ -48,6 +53,9 @@ public class UsbAudio {
     static class Alt {
         int iface, alt, uac = 1;
         int endpoint, maxPacket, packetSize, interval, attributes;
+        /** Výstup (do zariadenia); feedback = bod spätnej väzby, 0 = nemá. */
+        boolean out;
+        int feedback, feedbackPacket;
         int channels, subslot, bits;
         final List<Integer> rates = new ArrayList<>();
 
@@ -62,7 +70,8 @@ public class UsbAudio {
         String line() {
             return String.format(Locale.ROOT, "rozhranie %d nastavenie %d, UAC%d: %s; bod 0x%02x, typ 0x%02x, "
                             + "paket %d (max 0x%04x), interval %d, vzorka %d B",
-                    iface, alt, uac, format(), endpoint, attributes, packetSize, maxPacket, interval, subslot);
+                    iface, alt, uac, format(), endpoint, attributes, packetSize, maxPacket, interval, subslot)
+                    + (feedback != 0 ? String.format(Locale.ROOT, ", spätná väzba 0x%02x (%d B)", feedback, feedbackPacket) : "");
         }
     }
 
@@ -71,6 +80,17 @@ public class UsbAudio {
         int controlIface = -1, uac = 1;
         final List<Integer> clocks = new ArrayList<>();
         final List<Alt> alts = new ArrayList<>();
+        final List<Alt> outs = new ArrayList<>();
+
+        /** Najvhodnejší výstup: stereo, potom väčšia bitová hĺbka. */
+        Alt bestOut() {
+            Alt best = null;
+            for (Alt a : outs) {
+                if (!a.usable()) continue;
+                if (best == null || score(a) > score(best)) best = a;
+            }
+            return best;
+        }
 
         /** Najvhodnejší vstup: stereo pred ostatnými, potom väčšia bitová hĺbka. */
         Alt best() {
@@ -146,13 +166,18 @@ public class UsbAudio {
             } else if (type == 5 && cur != null) {
                 // Koncový bod: hľadáme izochrónny vstup, ktorý nie je len spätná väzba
                 int addr = u8(raw, i + 2), attr = u8(raw, i + 3), w = u16(raw, i + 4);
-                if ((attr & 3) == 1 && (addr & 0x80) != 0 && ((attr >> 4) & 3) != 1 && cur.endpoint == 0) {
+                boolean iso = (attr & 3) == 1, in = (addr & 0x80) != 0, fb = ((attr >> 4) & 3) == 1;
+                if (iso && !fb && cur.endpoint == 0) {
                     cur.endpoint = addr;
                     cur.attributes = attr;
                     cur.maxPacket = w;
                     cur.packetSize = (w & 0x7ff) * (1 + ((w >> 11) & 3));
                     cur.interval = u8(raw, i + 6);
-                    info.alts.add(cur);
+                    cur.out = !in;
+                    (in ? info.alts : info.outs).add(cur);
+                } else if (iso && in && fb && cur.out) {
+                    cur.feedback = addr;
+                    cur.feedbackPacket = w & 0x7ff;
                 }
             }
             i += len;
@@ -252,6 +277,10 @@ public class UsbAudio {
                     .append(", hodiny ").append(info.clocks).append("\n");
             for (Alt a : info.alts) s.append("Vstup: ").append(a.line()).append("\n");
             if (info.alts.isEmpty()) s.append("Žiadny zvukový vstup sa nenašiel.\n");
+            for (Alt a : info.outs) s.append("Výstup: ").append(a.line()).append("\n");
+            if (info.outs.isEmpty()) s.append("Žiadny zvukový výstup sa nenašiel.\n");
+            Direct d0 = Direct.current;
+            if (d0 != null) s.append("Výstup z aplikácie: ").append(d0.outputState()).append("\n");
             if (info.uac == 2 && info.controlIface >= 0) {
                 // Prevzatie rozhrania je potrebné, aby jadro pustilo požiadavku na hodiny.
                 UsbInterface ac = find(d, info.controlIface, 0);
@@ -286,9 +315,118 @@ public class UsbAudio {
         return gain == 1f ? v : Source.clamp((double) v * gain);
     }
 
-    /** Otvorené priame nahrávanie. */
+    /** Otvorené priame nahrávanie (a na požiadanie aj výstup do zariadenia). */
     static class Direct extends Source {
+        /** Práve otvorené zariadenie; cez neho idú metronóm a bicie do slúchadiel na zariadení. */
+        static volatile Direct current;
         UsbDeviceConnection conn;
+        Info info;
+        Alt outAlt;
+        UsbInterface outStream;
+        String outError;
+        boolean outStarted, highSpeed;
+        int outRate, outFrameBytes;
+        private double phase;
+        private short prev;
+        private byte[] outBuf = new byte[0];
+
+        boolean hasOutput() {
+            return outAlt != null && outError == null;
+        }
+
+        /** Spustí výstup pri prvom použití; vráti false, ak sa nedá. */
+        synchronized boolean ensureOutput() {
+            if (outStarted) return true;
+            if (outAlt == null || outError != null || handle == 0) return false;
+            Alt a = outAlt;
+            outStream = find(dev, a.iface, a.alt);
+            if (outStream == null || !conn.claimInterface(outStream, true)) {
+                outError = "rozhranie výstupu sa nedá prevziať";
+                return false;
+            }
+            if (!conn.setInterface(outStream)) {
+                outError = "zariadenie neprijalo nastavenie výstupu";
+                return false;
+            }
+            int interval = Math.max(1, Math.min(a.interval, 16));
+            int pps = highSpeed ? 8000 >> (interval - 1) : 1000 >> Math.min(interval - 1, 9);
+            outRate = finalRate();
+            outFrameBytes = a.channels * a.subslot;
+            int packets = Math.max(1, pps / 1000) * 2;
+            int r = nativeOutStart(handle, a.endpoint, a.packetSize, packets, outFrameBytes,
+                    outRate / (double) pps, a.feedback, a.feedbackPacket);
+            if (r < 0) {
+                outError = "výstup sa nedá spustiť (" + errno(r) + ")";
+                return false;
+            }
+            outPps = pps;
+            outStarted = true;
+            return true;
+        }
+
+        int outPps;
+
+        /**
+         * Pošle zvuk (mono, 16 bit, srcRate) do zariadenia; prepočíta ho na jeho vzorkovanie a formát.
+         * Čaká, kým je miesto (najviac ~40 ms zvuku vopred). Vráti false, ak výstup nejde.
+         */
+        synchronized boolean writeOut(short[] pcm, int n, int srcRate) {
+            if (handle == 0 || !ensureOutput()) return false;
+            int rate = finalRate();
+            if (rate != outRate && rate > 0) {
+                outRate = rate;
+                nativeOutNominal(handle, rate / (double) outPps);
+            }
+            Alt a = outAlt;
+            double step = srcRate / (double) outRate;
+            int max = (int) (n / step) + 2;
+            if (outBuf.length < max * outFrameBytes) outBuf = new byte[max * outFrameBytes];
+            int at = 0;
+            double p = phase;
+            while (p <= n - 1) {
+                int i = (int) Math.floor(p);
+                float f = (float) (p - i);
+                float x0 = i < 0 ? prev : pcm[i], x1 = pcm[i + 1];
+                int v = Math.round(x0 + (x1 - x0) * f);
+                for (int c = 0; c < a.channels; c++) at = put(outBuf, at, v, a.subslot);
+                p += step;
+            }
+            phase = p - n;
+            if (n > 0) prev = pcm[n - 1];
+            int limit = outRate / 25 * outFrameBytes;
+            int done = 0;
+            while (done < at) {
+                byte[] chunk = done == 0 ? outBuf : java.util.Arrays.copyOfRange(outBuf, done, at);
+                int r = nativeOutWrite(handle, chunk, at - done, limit);
+                if (r <= 0) {
+                    if (r < 0) outError = "výstup sa zastavil (" + errno(r) + ")";
+                    return r == 0;
+                }
+                done += r;
+            }
+            return true;
+        }
+
+        static int put(byte[] b, int at, int v16, int subslot) {
+            if (subslot == 4) {
+                b[at++] = 0;
+                b[at++] = 0;
+            } else if (subslot == 3) {
+                b[at++] = 0;
+            }
+            b[at++] = (byte) v16;
+            b[at++] = (byte) (v16 >> 8);
+            return at;
+        }
+
+        synchronized String outputState() {
+            if (outAlt == null) return "zariadenie výstup nemá";
+            if (outError != null) return outError;
+            if (!outStarted || handle == 0) return "zatiaľ nepoužitý (" + outAlt.format() + ")";
+            long[] st = nativeOutStats(handle);
+            return String.format(Locale.ROOT, "beží %d Hz, odoslané %d požiadaviek, %d rámcov, prázdne pakety %d, chyby %d, "
+                    + "spätná väzba %d× (%.3f rámca na paket)", outRate, st[0], st[1], st[2], st[3], st[4], st[5] / 1000.0);
+        }
         UsbInterface stream;
         Alt alt;
         long handle;
@@ -339,11 +477,19 @@ public class UsbAudio {
 
         @Override
         void close() {
-            if (handle != 0) {
-                rate = finalRate();
-                nativeClose(handle);
+            synchronized (this) {
+                if (current == this) current = null;
+                if (handle != 0) {
+                    rate = finalRate();
+                    nativeClose(handle);
+                }
+                handle = 0;
             }
-            handle = 0;
+            if (outStream != null) {
+                UsbInterface zero = find(dev, outStream.getId(), 0);
+                if (zero != null) conn.setInterface(zero);
+                conn.releaseInterface(outStream);
+            }
             UsbInterface zero = stream == null ? null : find(dev, stream.getId(), 0);
             if (zero != null) conn.setInterface(zero);
             if (stream != null) conn.releaseInterface(stream);
@@ -474,6 +620,10 @@ public class UsbAudio {
                                 s.frameBytes = alt.channels * alt.subslot;
                                 s.where = name(d) + " priamo cez USB (vlastný ovládač), " + alt.channels + " kan., "
                                         + alt.bits + " bit, hodiny " + rate + " Hz";
+                                s.info = info;
+                                s.outAlt = info.bestOut();
+                                s.highSpeed = packetsPerSecond(alt, rate) > 1000;
+                                Direct.current = s;
                                 return s;
                             }
                             log.append(packets).append("×").append(size).append(asap == 1 ? "" : " bez ASAP")

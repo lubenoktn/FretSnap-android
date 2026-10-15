@@ -342,6 +342,7 @@ public class MainActivity extends Activity {
         });
         test.setOnClickListener(v -> findSetup());
         usbInfo.setOnClickListener(v -> usbReport());
+        findViewById(R.id.toneTest).setOnClickListener(v -> toneTest());
         lookChoice(R.id.theme, Look.THEMES, "theme");
         lookChoice(R.id.accent, Look.ACCENTS, "accent");
         ((TextView) findViewById(R.id.version)).setText("Verzia " + Updates.current(this));
@@ -1066,7 +1067,7 @@ public class MainActivity extends Activity {
     void startMetronome() {
         DRUMS.stop();
         METRONOME.bpm = bpm;
-        METRONOME.start(metronomeDevice());
+        METRONOME.start(output());
     }
 
     void setBpm(int value) {
@@ -1116,7 +1117,7 @@ public class MainActivity extends Activity {
         METRONOME.stop();
         stopFollowing();
         DRUMS.bpm = bpm;
-        DRUMS.start(this, metronomeDevice(), countIn);
+        DRUMS.start(this, output(), countIn);
     }
 
     /** Štýl, prechody, hlasitosť a tempo bicích; zmeny počuť hneď. */
@@ -1194,6 +1195,55 @@ public class MainActivity extends Activity {
                     showTools();
                 })
                 .show();
+    }
+
+    /**
+     * Kam idú metronóm a bicie: do slúchadiel na USB zariadení (priamo, lebo Android ho pri
+     * vlastnom ovládači nevidí), inak cez Android do telefónu.
+     */
+    Output output() {
+        if (!metroPhone.isChecked() && Output.Usb.available()) return new Output.Usb();
+        return new Output.Track(metronomeDevice());
+    }
+
+    /** Krátke pípnutia priamo do USB zariadenia; potom ukáže, ako výstup beží. */
+    void toneTest() {
+        UsbAudio.Direct d = UsbAudio.Direct.current;
+        if (d == null) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Skúšobný tón")
+                    .setMessage("ToneX práve nie je pripojený cez vlastný ovládač (USB). Zapojte ho a skúste znova.")
+                    .setPositiveButton("Zavrieť", null)
+                    .show();
+            return;
+        }
+        findViewById(R.id.toneTest).setEnabled(false);
+        new Thread(() -> {
+            Output.Usb out = new Output.Usb();
+            short[] chunk = new short[Output.RATE / 100];
+            long k = 0;
+            for (int c = 0; c < 150; c++) {
+                for (int i = 0; i < chunk.length; i++, k++) {
+                    double t = k / (double) Output.RATE;
+                    boolean on = (t % 0.5) < 0.25;
+                    chunk[i] = (short) (on ? Math.sin(2 * Math.PI * 440 * t) * 0.5 * 32767 * Math.min(1, (0.25 - t % 0.5) * 40) : 0);
+                }
+                out.write(chunk, chunk.length);
+            }
+            String state = d.outputState();
+            ui.post(() -> {
+                findViewById(R.id.toneTest).setEnabled(true);
+                status.setText("Výstup do USB: " + state);
+                new AlertDialog.Builder(this)
+                        .setTitle("Skúšobný tón")
+                        .setMessage((d.hasOutput() ? "Zazneli v slúchadlách ToneX tri pípnutia?\n\n"
+                                : "Do ToneX sa zvuk poslať nepodarilo.\n\n") + "Výstup: " + state
+                                + "\n\nAk nič nepočuť, pošlite Popis USB.")
+                        .setPositiveButton("Zavrieť", null)
+                        .setNeutralButton("Popis USB", (x, w) -> usbReport())
+                        .show();
+            });
+        }, "ton").start();
     }
 
     /** Metronóm ide do ToneX (do slúchadiel na gitare), ak nie je zvolený telefón. */
@@ -2085,7 +2135,7 @@ public class MainActivity extends Activity {
         DRUMS.bpm = r.info.bpm;
         DRUMS.style = java.util.Arrays.asList(Drums.STYLES).indexOf(drumStyleOf(r));
         tickClock();
-        DRUMS.follow(this, playbackDevice(), playerClock, Math.max(0, r.info.beat0));
+        DRUMS.follow(this, new Output.Track(playbackDevice()), playerClock, Math.max(0, r.info.beat0));
         showTools();
     }
 

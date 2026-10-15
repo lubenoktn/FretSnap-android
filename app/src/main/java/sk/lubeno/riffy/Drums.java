@@ -1,10 +1,6 @@
 package sk.lubeno.riffy;
 
 import android.content.Context;
-import android.media.AudioAttributes;
-import android.media.AudioDeviceInfo;
-import android.media.AudioFormat;
-import android.media.AudioTrack;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -228,7 +224,7 @@ final class Drums {
     private volatile boolean running;
     private Thread thread;
     private volatile Sequencer seq;
-    private volatile AudioTrack track;
+    private volatile Output track;
     private volatile Clock clock;
     private volatile double firstBeatMs;
     // Ktorej dobe zodpovedá ktorá vzorka poslaná do zvuku (na zistenie, kde v takte práve je).
@@ -243,7 +239,7 @@ final class Drums {
     }
 
     /** Hrá samo; s odpočtom paličkami (jeden takt) pred prvou dobou. */
-    void start(Context c, AudioDeviceInfo out, boolean countIn) {
+    void start(Context c, Output out, boolean countIn) {
         stop();
         load(c);
         clock = null;
@@ -255,7 +251,7 @@ final class Drums {
     }
 
     /** Ide za prehrávanou nahrávkou; firstBeatMs = kde v nej je prvá doba taktu. */
-    void follow(Context c, AudioDeviceInfo out, Clock source, double firstBeatMs) {
+    void follow(Context c, Output out, Clock source, double firstBeatMs) {
         stop();
         load(c);
         clock = source;
@@ -281,7 +277,7 @@ final class Drums {
         return (c.positionMs() - firstBeatMs) * bpm / 60000.0;
     }
 
-    private void begin(Sequencer s, AudioDeviceInfo out) {
+    private void begin(Sequencer s, Output out) {
         seq = s;
         running = true;
         thread = new Thread(() -> loop(s, out), "bicie");
@@ -305,25 +301,13 @@ final class Drums {
      * Podľa toho sa k nahrávke uloží, kde v nej začína takt.
      */
     synchronized double audibleBeat() {
-        AudioTrack t = track;
+        Output t = track;
         if (!running || t == null || clock != null) return Double.NaN;
-        long head = t.getPlaybackHeadPosition() & 0xffffffffL;
+        long head = t.played();
         return anchorBeat + (head - anchorFrame) * beatsPerFrame;
     }
 
-    private void loop(Sequencer s, AudioDeviceInfo out) {
-        int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
-        AudioTrack t = new AudioTrack.Builder()
-                .setAudioAttributes(new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                .setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
-                .setBufferSizeInBytes(Math.max(min, RATE / 20 * 2))
-                .setTransferMode(AudioTrack.MODE_STREAM).build();
-        if (out != null) t.setPreferredDevice(out);
-        t.play();
+    private void loop(Sequencer s, Output t) {
         track = t;
         short[] chunk = new short[RATE / 100];
         long written = 0;
@@ -339,7 +323,7 @@ final class Drums {
                 if (c != null) {
                     if (!c.playing()) {
                         java.util.Arrays.fill(chunk, (short) 0);
-                        t.write(chunk, 0, chunk.length);
+                        t.write(chunk, chunk.length);
                         written += chunk.length;
                         continue;
                     }
@@ -358,14 +342,12 @@ final class Drums {
                     }
                 }
                 s.render(chunk, chunk.length, speed);
-                t.write(chunk, 0, chunk.length);
+                t.write(chunk, chunk.length);
                 written += chunk.length;
             }
         } finally {
             track = null;
-            t.pause();
-            t.flush();
-            t.release();
+            t.close();
         }
     }
 }

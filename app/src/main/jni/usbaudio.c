@@ -2,6 +2,9 @@
 // Java otvorí zariadenie cez UsbManager, prevezme rozhranie a vyberie nastavenie;
 // tu sa cez jeho súborový popisovač posielajú a preberajú požiadavky jadra (usbdevfs).
 //
+// Do zariadenia sa dá aj posielať (metronóm, bicie do slúchadiel na ToneX): výstup beží na tom
+// istom súborovom popisovači, lebo jadro vracia hotové požiadavky celého zariadenia jednému vláknu.
+//
 // Požiadavky preberá samostatné vlákno a dáta ukladá do kruhovej zásoby, z ktorej si ich
 // Java berie vlastným tempom. Keby ich preberala Java sama, pri každom zdržaní (ukladanie,
 // upratovanie pamäte) by zariadenie nemalo kam posielať a zvuk by sa trhal.
@@ -12,12 +15,16 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <time.h>
 #include <sys/ioctl.h>
 #include <linux/usbdevice_fs.h>
 
 #define URBS 16
 #define RING (1 << 20)
+#define OUT_URBS 6
+#define FB_URBS 4
+#define OUT_RING (1 << 16)
 
 typedef struct {
     int fd;
@@ -36,6 +43,15 @@ typedef struct {
     // zvuku, pošlú paket samých núl. Tie sa vyhodia, ak je už zvuku viac, než pri ohlásenom
     // vzorkovaní za ten čas patrí; skutočné ticho tak ostane.
     double perPacket, expected;
+
+    // Výstup: vlastná zásoba (už vo formáte zariadenia), z ktorej sa plnia odosielané pakety.
+    int outEp, outPacketMax, outPackets, outFrameBytes, fbEp, fbPacket, fbHigh;
+    struct usbdevfs_urb *outUrbs[OUT_URBS], *fbUrbs[FB_URBS];
+    unsigned char *outRing;
+    uint64_t outHead, outTail;
+    double outNominal, outFeedback, outAcc;
+    int64_t outSent, outFrames, outEmpty, outErrors, fbCount;
+    int outRunning;
 } Stream;
 
 static int submit(Stream *s, struct usbdevfs_urb *u) {
@@ -57,6 +73,12 @@ static int submit(Stream *s, struct usbdevfs_urb *u) {
 static void forget(Stream *s, struct usbdevfs_urb *u) {
     for (int i = 0; i < URBS; i++) {
         if (s->urbs[i] == u) s->urbs[i] = NULL;
+    }
+    for (int i = 0; i < OUT_URBS; i++) {
+        if (s->outUrbs[i] == u) s->outUrbs[i] = NULL;
+    }
+    for (int i = 0; i < FB_URBS; i++) {
+        if (s->fbUrbs[i] == u) s->fbUrbs[i] = NULL;
     }
     free(u->buffer);
     free(u);
@@ -98,6 +120,79 @@ static void store(Stream *s, struct usbdevfs_urb *u) {
     }
 }
 
+/**
+ * Naplní odosielanú požiadavku: v každom pakete toľko rámcov, koľko zariadenie za ten čas
+ * prehrá (podľa spätnej väzby, inak podľa ohláseného vzorkovania). Chýbajúci zvuk = ticho.
+ */
+static int submitOut(Stream *s, struct usbdevfs_urb *u) {
+    unsigned char *buf = u->buffer;
+    int total = 0;
+    double per = s->outFeedback > 0 ? s->outFeedback : s->outNominal;
+    for (int i = 0; i < s->outPackets; i++) {
+        s->outAcc += per;
+        int frames = (int) s->outAcc;
+        s->outAcc -= frames;
+        int len = frames * s->outFrameBytes;
+        if (len > s->outPacketMax) len = s->outPacketMax - s->outPacketMax % s->outFrameBytes;
+        uint64_t avail = s->outHead - s->outTail;
+        int take = avail < (uint64_t) len ? (int) (avail - avail % s->outFrameBytes) : len;
+        size_t at = s->outTail % OUT_RING, first = OUT_RING - at < (size_t) take ? OUT_RING - at : (size_t) take;
+        memcpy(buf + total, s->outRing + at, first);
+        if (first < (size_t) take) memcpy(buf + total + first, s->outRing, take - first);
+        if (take < len) {
+            memset(buf + total + take, 0, len - take);
+            s->outEmpty++;
+        }
+        s->outTail += take;
+        u->iso_frame_desc[i].length = len;
+        u->iso_frame_desc[i].actual_length = 0;
+        u->iso_frame_desc[i].status = 0;
+        total += len;
+        s->outFrames += frames;
+    }
+    u->status = 0;
+    u->actual_length = 0;
+    u->error_count = 0;
+    u->start_frame = 0;
+    u->flags = USBDEVFS_URB_ISO_ASAP;
+    u->number_of_packets = s->outPackets;
+    u->buffer_length = total;
+    s->outSent++;
+    return ioctl(s->fd, USBDEVFS_SUBMITURB, u) < 0 ? -errno : 0;
+}
+
+static int submitFb(Stream *s, struct usbdevfs_urb *u) {
+    u->status = 0;
+    u->actual_length = 0;
+    u->error_count = 0;
+    u->start_frame = 0;
+    u->flags = USBDEVFS_URB_ISO_ASAP;
+    u->number_of_packets = 1;
+    u->buffer_length = s->fbPacket;
+    u->iso_frame_desc[0].length = s->fbPacket;
+    u->iso_frame_desc[0].actual_length = 0;
+    u->iso_frame_desc[0].status = 0;
+    return ioctl(s->fd, USBDEVFS_SUBMITURB, u) < 0 ? -errno : 0;
+}
+
+/** Spätná väzba: koľko rámcov na paket zariadenie chce (USB 2.0: 16.16, USB 1.1: 10.14 na ms). */
+static void feedback(Stream *s, struct usbdevfs_urb *u) {
+    int len = u->iso_frame_desc[0].actual_length;
+    if (u->iso_frame_desc[0].status != 0 || len < 3) return;
+    unsigned char *b = u->buffer;
+    uint32_t raw = b[0] | b[1] << 8 | b[2] << 16 | (len >= 4 ? (uint32_t) b[3] << 24 : 0);
+    double a = len >= 4 ? raw / 65536.0 : raw / 16384.0;
+    double c = (raw & 0xffffff) / 16384.0;
+    double want = s->outNominal;
+    // Niektoré zariadenia posielajú iný formát, než by mali; berie sa ten, ktorý dáva zmysel.
+    double v = fabs(a - want) < want * 0.25 ? a : fabs(c - want) < want * 0.25 ? c
+             : fabs(c / 8 - want) < want * 0.25 ? c / 8 : 0;
+    if (v > 0) {
+        s->outFeedback = v;
+        s->fbCount++;
+    }
+}
+
 static void *reaper(void *arg) {
     Stream *s = arg;
     for (;;) {
@@ -116,6 +211,13 @@ static void *reaper(void *arg) {
             for (int i = 0; i < URBS; i++) {
                 if (s->urbs[i]) forget(s, s->urbs[i]);
             }
+            for (int i = 0; i < OUT_URBS; i++) {
+                if (s->outUrbs[i]) forget(s, s->outUrbs[i]);
+            }
+            for (int i = 0; i < FB_URBS; i++) {
+                if (s->fbUrbs[i]) forget(s, s->fbUrbs[i]);
+            }
+            s->outRunning = 0;
             s->inflight = 0;
             pthread_cond_broadcast(&s->ready);
             pthread_mutex_unlock(&s->lock);
@@ -124,6 +226,29 @@ static void *reaper(void *arg) {
 
         pthread_mutex_lock(&s->lock);
         s->inflight--;
+        int ep = done->endpoint;
+        if (s->outEp && (ep == s->outEp || ep == s->fbEp)) {
+            // Výstup: chyba výstupu nezastaví nahrávanie, len sa výstup vypne.
+            int r = -100000;
+            if (s->running && s->outRunning) {
+                if (ep == s->outEp) {
+                    if (done->status != 0) s->outErrors++;
+                    r = submitOut(s, done);
+                } else {
+                    feedback(s, done);
+                    r = submitFb(s, done);
+                }
+            }
+            if (r < 0) {
+                if (s->outRunning && r != -100000) s->outErrors++;
+                forget(s, done);
+            } else {
+                s->inflight++;
+            }
+            pthread_cond_broadcast(&s->ready);
+            pthread_mutex_unlock(&s->lock);
+            continue;
+        }
         if (s->running) {
             store(s, done);
             int r = submit(s, done);
@@ -164,6 +289,7 @@ static void destroy(Stream *s) {
     pthread_mutex_destroy(&s->lock);
     pthread_cond_destroy(&s->ready);
     free(s->ring);
+    free(s->outRing);
     free(s);
 }
 
@@ -260,11 +386,141 @@ Java_sk_lubeno_riffy_UsbAudio_nativeClose(JNIEnv *env, jclass cls, jlong handle)
     pthread_mutex_lock(&s->lock);
     s->running = 0;
     // Zahodené požiadavky jadro vráti a vlákno ich uprace; potom samo skončí.
+    s->outRunning = 0;
     for (int i = 0; i < URBS; i++) {
         if (s->urbs[i]) ioctl(s->fd, USBDEVFS_DISCARDURB, s->urbs[i]);
+    }
+    for (int i = 0; i < OUT_URBS; i++) {
+        if (s->outUrbs[i]) ioctl(s->fd, USBDEVFS_DISCARDURB, s->outUrbs[i]);
+    }
+    for (int i = 0; i < FB_URBS; i++) {
+        if (s->fbUrbs[i]) ioctl(s->fd, USBDEVFS_DISCARDURB, s->fbUrbs[i]);
     }
     pthread_cond_broadcast(&s->ready);
     pthread_mutex_unlock(&s->lock);
     if (s->started) pthread_join(s->thread, NULL);
     destroy(s);
+}
+
+/**
+ * Spustí výstup na už otvorenom prenose (rozhranie výstupu musí byť prevzaté a nastavené).
+ * nominal = rámce na paket podľa vzorkovania; fbEp = 0, ak zariadenie spätnú väzbu nemá.
+ * Vráti 0 alebo -errno.
+ */
+JNIEXPORT jint JNICALL
+Java_sk_lubeno_riffy_UsbAudio_nativeOutStart(JNIEnv *env, jclass cls, jlong handle, jint endpoint, jint packetMax,
+                                             jint packets, jint frameBytes, jdouble nominal, jint fbEp, jint fbPacket) {
+    Stream *s = (Stream *) (intptr_t) handle;
+    pthread_mutex_lock(&s->lock);
+    if (s->outEp || !s->running) {
+        pthread_mutex_unlock(&s->lock);
+        return s->outEp ? 0 : -ENODEV;
+    }
+    s->outEp = endpoint;
+    s->outPacketMax = packetMax;
+    s->outPackets = packets;
+    s->outFrameBytes = frameBytes > 0 ? frameBytes : 1;
+    s->outNominal = nominal;
+    s->fbEp = fbEp;
+    s->fbPacket = fbPacket > 0 ? fbPacket : 4;
+    s->outRing = calloc(1, OUT_RING);
+    s->outRunning = 1;
+    int result = 0;
+    for (int i = 0; i < OUT_URBS; i++) {
+        struct usbdevfs_urb *u = calloc(1, sizeof(struct usbdevfs_urb) + packets * sizeof(struct usbdevfs_iso_packet_desc));
+        u->type = USBDEVFS_URB_TYPE_ISO;
+        u->endpoint = (unsigned char) endpoint;
+        u->buffer = calloc(packets, packetMax);
+        u->usercontext = s;
+        s->outUrbs[i] = u;
+        int r = submitOut(s, u);
+        if (r < 0) {
+            forget(s, u);
+            result = r;
+            break;
+        }
+        s->inflight++;
+    }
+    for (int i = 0; fbEp && result == 0 && i < FB_URBS; i++) {
+        struct usbdevfs_urb *u = calloc(1, sizeof(struct usbdevfs_urb) + sizeof(struct usbdevfs_iso_packet_desc));
+        u->type = USBDEVFS_URB_TYPE_ISO;
+        u->endpoint = (unsigned char) fbEp;
+        u->buffer = calloc(1, s->fbPacket);
+        u->usercontext = s;
+        s->fbUrbs[i] = u;
+        if (submitFb(s, u) < 0) {
+            // Bez spätnej väzby sa dá hrať aj podľa ohláseného vzorkovania.
+            forget(s, u);
+            break;
+        }
+        s->inflight++;
+    }
+    if (result < 0) {
+        s->outRunning = 0;
+        for (int i = 0; i < OUT_URBS; i++) {
+            if (s->outUrbs[i]) ioctl(s->fd, USBDEVFS_DISCARDURB, s->outUrbs[i]);
+        }
+    }
+    pthread_mutex_unlock(&s->lock);
+    return result;
+}
+
+/** Zmena vzorkovania výstupu, keď sa zistí skutočné (rámce na paket). */
+JNIEXPORT void JNICALL
+Java_sk_lubeno_riffy_UsbAudio_nativeOutNominal(JNIEnv *env, jclass cls, jlong handle, jdouble nominal) {
+    Stream *s = (Stream *) (intptr_t) handle;
+    pthread_mutex_lock(&s->lock);
+    s->outNominal = nominal;
+    pthread_mutex_unlock(&s->lock);
+}
+
+/**
+ * Pridá zvuk (vo formáte zariadenia) do zásoby výstupu. Počká, kým je v zásobe menej než
+ * limit bajtov, aby sa zvuk nehromadil (oneskorenie). Vráti zapísané bajty alebo -errno.
+ */
+JNIEXPORT jint JNICALL
+Java_sk_lubeno_riffy_UsbAudio_nativeOutWrite(JNIEnv *env, jclass cls, jlong handle, jbyteArray data, jint n, jint limit) {
+    Stream *s = (Stream *) (intptr_t) handle;
+    jbyte *src = (*env)->GetByteArrayElements(env, data, NULL);
+    pthread_mutex_lock(&s->lock);
+    if (limit > OUT_RING) limit = OUT_RING;
+    for (int waited = 0; s->outRunning && s->running && s->outHead - s->outTail + n > (uint64_t) limit && waited < 100; waited++) {
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        until.tv_nsec += 5000000;
+        if (until.tv_nsec >= 1000000000) {
+            until.tv_sec++;
+            until.tv_nsec -= 1000000000;
+        }
+        pthread_cond_timedwait(&s->ready, &s->lock, &until);
+    }
+    int result;
+    if (!s->outRunning || !s->running) {
+        result = -ENODEV;
+    } else {
+        uint64_t space = OUT_RING - (s->outHead - s->outTail);
+        size_t len = (size_t) n < space ? (size_t) n : (size_t) space;
+        size_t at = s->outHead % OUT_RING, first = OUT_RING - at < len ? OUT_RING - at : len;
+        memcpy(s->outRing + at, src, first);
+        if (first < len) memcpy(s->outRing, (unsigned char *) src + first, len - first);
+        s->outHead += len;
+        result = (int) len;
+    }
+    pthread_mutex_unlock(&s->lock);
+    (*env)->ReleaseByteArrayElements(env, data, src, JNI_ABORT);
+    return result;
+}
+
+/** Odoslané požiadavky, odoslané rámce, prázdne pakety, chyby, prijatá spätná väzba, rámce na paket ×1000, beží. */
+JNIEXPORT jlongArray JNICALL
+Java_sk_lubeno_riffy_UsbAudio_nativeOutStats(JNIEnv *env, jclass cls, jlong handle) {
+    Stream *s = (Stream *) (intptr_t) handle;
+    pthread_mutex_lock(&s->lock);
+    double per = s->outFeedback > 0 ? s->outFeedback : s->outNominal;
+    jlong v[7] = {s->outSent, s->outFrames, s->outEmpty, s->outErrors, s->fbCount, (jlong) (per * 1000),
+                  s->outRunning && s->inflight > 0};
+    pthread_mutex_unlock(&s->lock);
+    jlongArray a = (*env)->NewLongArray(env, 7);
+    (*env)->SetLongArrayRegion(env, a, 0, 7, v);
+    return a;
 }

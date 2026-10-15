@@ -738,7 +738,14 @@
                 android:id="@+id/metroPhone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Metronóm do telefónu (inak do ToneX)" />
+                android:text="Metronóm a bicie do telefónu (inak do ToneX)" />
+
+            <Button
+                android:id="@+id/toneTest"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Skúšobný tón do ToneX"
+                android:textAllCaps="false" />
 
             <TextView
                 style="@style/Section"
