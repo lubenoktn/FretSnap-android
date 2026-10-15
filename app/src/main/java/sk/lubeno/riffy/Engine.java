@@ -42,6 +42,8 @@ final class Engine {
     }
 
     volatile Listener listener;
+    /** Ladička dostáva ten istý prúd vzoriek; null, keď je vypnutá. */
+    volatile Tuner tuner;
     private volatile float gain = 1f;
     private volatile boolean running;
     private Thread thread;
@@ -190,6 +192,8 @@ final class Engine {
                     }
                 }
                 Source.peaks(buf, n, c.channels, peak);
+                Tuner t = tuner;
+                if (t != null) t.feed(buf, n, c.channels, c.rate);
                 if (now - last > 80) {
                     last = now;
                     l = listener;
