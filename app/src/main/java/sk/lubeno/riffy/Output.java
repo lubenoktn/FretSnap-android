@@ -72,7 +72,7 @@ abstract class Output {
      * práve nie je otvorené (zapína sa, odpojilo sa), zvuk sa zahodí, ale tempo beží ďalej.
      */
     static final class Usb extends Output {
-        private long written;
+        private volatile long written;
         private long startedAt = -1;
 
         /** Je zariadenie s výstupom práve otvorené? */
@@ -97,12 +97,12 @@ abstract class Output {
         }
 
         long played() {
-            // V zásobe výstupu čaká najviac ~40 ms zvuku.
-            return Math.max(0, written - RATE / 25);
+            return Math.max(0, written - Math.round(latencyMs() * RATE / 1000));
         }
 
         double latencyMs() {
-            return 50;
+            UsbAudio.Direct d = UsbAudio.Direct.current;
+            return d == null ? 50 : d.pendingMs();
         }
 
         void close() {

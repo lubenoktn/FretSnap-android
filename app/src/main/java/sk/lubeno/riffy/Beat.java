@@ -127,6 +127,80 @@ final class Beat {
         return (int) Math.round(Math.atan2(sy, sx) / (2 * Math.PI) * eighth);
     }
 
+    /** Ako pravidelne padajú údery na mriežku s periódou period (s), 0–1, a jej posun (s). */
+    static double[] grid(double[] onsets, double period) {
+        double sx = 0, sy = 0;
+        for (double t : onsets) {
+            double ph = 2 * Math.PI * t / period;
+            sx += Math.cos(ph);
+            sy += Math.sin(ph);
+        }
+        double r = Math.hypot(sx, sy) / Math.max(1, onsets.length);
+        double shift = Math.atan2(sy, sx) / (2 * Math.PI) * period;
+        return new double[]{r, Math.floorMod((long) Math.round(shift * 1e6), (long) Math.round(period * 1e6)) / 1e6};
+    }
+
+    /**
+     * Tempo a prvá doba taktu z úderov: {bpm, ms prvej doby}, alebo null, ak sa nedá spoľahlivo určiť.
+     * Skúša tempá 60–180 (štvrťové aj osminové údery), uprednostní bežné tempá okolo 110.
+     * Prvá doba taktu = tá zo štyroch, na ktorú padá najviac úderov.
+     */
+    static int[] tempo(double[] onsets, int beatsPerBar) {
+        if (onsets.length < 8) return null;
+        double best = 0, bestBpm = 0;
+        for (double bpm = 60; bpm <= 180; bpm += 0.5) {
+            double score = score(onsets, bpm);
+            if (score > best) {
+                best = score;
+                bestBpm = bpm;
+            }
+        }
+        for (double bpm = bestBpm - 0.5; bpm <= bestBpm + 0.5; bpm += 0.05) {
+            double score = score(onsets, bpm);
+            if (score > best) {
+                best = score;
+                bestBpm = bpm;
+            }
+        }
+        int bpm = (int) Math.round(bestBpm);
+        double beat = 60.0 / bpm;
+        double[] q = grid(onsets, beat);
+        // Spoľahlivé, ak údery sedia na štvrťovú alebo osminovú mriežku (riffy bývajú na osminy).
+        if (0.6 * q[0] + 0.4 * grid(onsets, beat / 2)[0] < 0.3) return null;
+        lastScore = 0.6 * q[0] + 0.4 * grid(onsets, beat / 2)[0];
+        // Poloha mriežky podľa zreteľnejšej z osmín a štvrtín; prvá doba taktu = osmina,
+        // na ktorú (v takte) padne najviac úderov.
+        double[] e = grid(onsets, beat / 2);
+        double phase = e[0] >= q[0] ? e[1] : q[1];
+        double bar = beat * beatsPerBar;
+        int bestK = 0, bestCount = -1;
+        for (int k = 0; k < beatsPerBar * 2; k++) {
+            double first = phase + k * beat / 2;
+            int count = 0;
+            for (double t : onsets) {
+                double rel = Math.floorMod((long) Math.round((t - first) * 1000), (long) Math.round(bar * 1000)) / 1000.0;
+                if (rel < 0.06 || bar - rel < 0.06) count++;
+            }
+            // Pri rovnakom počte prednosť dobám pred osminami „a“
+            if (count > bestCount || (count == bestCount && k % 2 == 0 && bestK % 2 == 1)) {
+                bestCount = count;
+                bestK = k;
+            }
+        }
+        double firstMs = (phase + bestK * beat / 2) * 1000;
+        firstMs = Math.floorMod((long) Math.round(firstMs), (long) Math.round(bar * 1000));
+        return new int[]{bpm, (int) firstMs};
+    }
+
+    static double lastScore;
+
+    private static double score(double[] onsets, double bpm) {
+        double beat = 60 / bpm;
+        double r4 = grid(onsets, beat)[0], r8 = grid(onsets, beat / 2)[0];
+        double prior = Math.exp(-0.5 * Math.pow(Math.log(bpm / 110) / Math.log(2) / 0.6, 2));
+        return (0.6 * r4 + 0.4 * r8) * prior;
+    }
+
     /** Rýchla Fourierova transformácia na mieste (dĺžka = mocnina dvoch). */
     static void fft(double[] re, double[] im) {
         int n = re.length;

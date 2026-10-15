@@ -23,6 +23,7 @@ public class WaveView extends View {
     private final int accent, slop;
     private byte[] peaks;
     private float position = -1, loopFrom = -1, loopTo = -1, downX, dragX = -1;
+    private float[] marks = new float[0];
     private Listener listener;
 
     public WaveView(Context c, AttributeSet a) {
@@ -47,6 +48,12 @@ public class WaveView extends View {
     void setLoop(float from, float to) {
         loopFrom = from;
         loopTo = to;
+        invalidate();
+    }
+
+    /** Značky (0–1). */
+    void setMarks(float[] m) {
+        marks = m;
         invalidate();
     }
 
@@ -119,6 +126,12 @@ public class WaveView extends View {
                 paint.setColor(played ? accent : 0x88808080);
                 c.drawLine(x, mid - half, x, mid + half, paint);
             }
+        }
+        paint.setStrokeWidth(Math.max(2, 1.5f * density));
+        paint.setColor(0xFFF9A825);
+        for (float m : marks) {
+            c.drawLine(m * w, 0, m * w, h, paint);
+            c.drawCircle(m * w, 3 * density, 3 * density, paint);
         }
         if (position >= 0) {
             paint.setStrokeWidth(Math.max(2, 2 * density));

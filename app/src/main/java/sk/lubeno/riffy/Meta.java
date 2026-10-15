@@ -28,9 +28,15 @@ final class Meta {
         int beat0 = -1;
         /** Doba už doladená podľa úderov v nahrávke. */
         boolean aligned;
+        /** Pieseň a časť (napr. „Sloha“), poradie v piesni. */
+        String song = "", part = "";
+        int order;
+        /** Značky v nahrávke (ms), vzostupne. */
+        java.util.List<Integer> markers = new java.util.ArrayList<>();
 
         boolean empty() {
-            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite && drums.isEmpty();
+            return note.isEmpty() && key.isEmpty() && bpm <= 0 && !favorite && drums.isEmpty() && song.isEmpty()
+                    && markers.isEmpty();
         }
     }
 
@@ -53,9 +59,12 @@ final class Meta {
     }
 
     Info get(String name) {
-        Info i = new Info();
         JSONObject o = all.optJSONObject(name);
-        if (o == null) return i;
+        return o == null ? new Info() : read(o);
+    }
+
+    static Info read(JSONObject o) {
+        Info i = new Info();
         i.note = o.optString("note");
         i.key = o.optString("key");
         i.bpm = o.optInt("bpm");
@@ -63,7 +72,28 @@ final class Meta {
         i.drums = o.optString("drums");
         i.beat0 = o.optInt("beat0", -1);
         i.aligned = o.optBoolean("aligned");
+        i.song = o.optString("song");
+        i.part = o.optString("part");
+        i.order = o.optInt("order");
+        org.json.JSONArray m = o.optJSONArray("markers");
+        if (m != null) for (int k = 0; k < m.length(); k++) i.markers.add(m.optInt(k));
         return i;
+    }
+
+    static void write(JSONObject o, Info i) throws JSONException {
+        o.put("note", i.note);
+        o.put("key", i.key);
+        o.put("bpm", i.bpm);
+        o.put("favorite", i.favorite);
+        if (!i.drums.isEmpty()) o.put("drums", i.drums);
+        if (i.beat0 >= 0) o.put("beat0", i.beat0);
+        if (i.aligned) o.put("aligned", true);
+        if (!i.song.isEmpty()) {
+            o.put("song", i.song);
+            o.put("part", i.part);
+            o.put("order", i.order);
+        }
+        if (!i.markers.isEmpty()) o.put("markers", new org.json.JSONArray(i.markers));
     }
 
     void put(String name, Info i) {
@@ -72,13 +102,7 @@ final class Meta {
                 all.remove(name);
             } else {
                 JSONObject o = new JSONObject();
-                o.put("note", i.note);
-                o.put("key", i.key);
-                o.put("bpm", i.bpm);
-                o.put("favorite", i.favorite);
-                if (!i.drums.isEmpty()) o.put("drums", i.drums);
-                if (i.beat0 >= 0) o.put("beat0", i.beat0);
-                if (i.aligned) o.put("aligned", true);
+                write(o, i);
                 all.put(name, o);
             }
         } catch (JSONException ignored) {
@@ -95,13 +119,7 @@ final class Meta {
         try {
             JSONObject o = new JSONObject();
             o.put("app", "Riffy");
-            o.put("note", i.note);
-            o.put("key", i.key);
-            o.put("bpm", i.bpm);
-            o.put("favorite", i.favorite);
-            if (!i.drums.isEmpty()) o.put("drums", i.drums);
-            if (i.beat0 >= 0) o.put("beat0", i.beat0);
-            if (i.aligned) o.put("aligned", true);
+            write(o, i);
             return o.toString().getBytes(StandardCharsets.UTF_8);
         } catch (JSONException e) {
             return new byte[0];
@@ -114,15 +132,7 @@ final class Meta {
         try {
             JSONObject o = new JSONObject(new String(b, StandardCharsets.UTF_8));
             if (!"Riffy".equals(o.optString("app"))) return null;
-            Info i = new Info();
-            i.note = o.optString("note");
-            i.key = o.optString("key");
-            i.bpm = o.optInt("bpm");
-            i.favorite = o.optBoolean("favorite");
-            i.drums = o.optString("drums");
-            i.beat0 = o.optInt("beat0", -1);
-            i.aligned = o.optBoolean("aligned");
-            return i;
+            return read(o);
         } catch (JSONException e) {
             return null;
         }

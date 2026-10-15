@@ -419,6 +419,13 @@ public class UsbAudio {
             return at;
         }
 
+        /** O koľko ms neskôr zaznie, čo sa práve pošle (zásoba + odoslané požiadavky). */
+        synchronized double pendingMs() {
+            if (!outStarted || handle == 0 || outRate <= 0) return 50;
+            long[] st = nativeOutStats(handle);
+            return st[7] / (double) outFrameBytes * 1000.0 / outRate + 12;
+        }
+
         synchronized String outputState() {
             if (outAlt == null) return "zariadenie výstup nemá";
             if (outError != null) return outError;

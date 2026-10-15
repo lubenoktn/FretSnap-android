@@ -6,22 +6,24 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Sprievodné bicie: hotové rytmy (rock, metal, reggae, balada) v 4/4, prechod každých
- * niekoľko taktov a činel po ňom. Hrajú buď samé (k hraniu a nahrávaniu), alebo idú
- * za prehrávanou nahrávkou ({@link Clock}), aby sedeli s riffom aj pri slučke a spomalení.
+ * Prehrávač rytmu: metronóm, sprievodné bicie (rock, metal, reggae, balada, blues shuffle, funk,
+ * punk, 6/8, 3/4) a slučka loopera v jednom zvuku a na jednej časovej osi, aby k sebe sedeli.
+ * Hrá buď sám (k hraniu, nahrávaniu a looperu), alebo ide za prehrávanou nahrávkou
+ * ({@link Clock}), aby bicie sedeli s riffom aj pri slučke a spomalení.
  *
  * Zvuky (res/raw/d_*.pcm, mono 48 kHz 16 bit) sú zo súpravy Virtuosity Drums od Versilian Studios
  * (CC0, github.com/sfzinstruments/virtuosity_drums): blízke mikrofóny a mikrofóny nad súpravou
- * zmiešané do jedného úderu. Paličky na odpočet (d_stick) sú vypočítané.
+ * zmiešané do jedného úderu. Paličky na odpočet (d_stick) a cvaknutia metronómu sú vypočítané.
  */
 final class Drums {
     static final int RATE = 48000;
-    static final String[] STYLES = {"Rock", "Metal", "Reggae", "Balada"};
     static final String[] FILLS = {"každé 4 takty", "každých 8 taktov", "bez prechodov"};
     static final int[] FILL_BARS = {4, 8, 0};
+    /** Čo hrá: nič (len slučka), metronóm, bicie. */
+    static final int OFF = 0, CLICK = 1, DRUMS = 2;
 
     static final int KICK = 0, SNARE = 1, RIM = 2, HAT = 3, OPEN = 4, CRASH = 5, RIDE = 6,
-            TOM1 = 7, TOM2 = 8, TOM3 = 9, STICK = 10, SOUNDS = 11;
+            TOM1 = 7, TOM2 = 8, TOM3 = 9, STICK = 10, CLICK_HI = 11, CLICK_LO = 12, SOUNDS = 13;
     private static final int[] RAW = {R.raw.d_kick, R.raw.d_snare, R.raw.d_rim, R.raw.d_hat, R.raw.d_open,
             R.raw.d_crash, R.raw.d_ride, R.raw.d_tom1, R.raw.d_tom2, R.raw.d_tom3, R.raw.d_stick};
 
@@ -34,18 +36,22 @@ final class Drums {
         float speed();
     }
 
-    /** Jeden takt: hlasitosť úderu (0 = nič) pre každý nástroj a každú šestnástinu. */
+    /** Jeden takt: hlasitosť úderu (0 = nič) pre každý nástroj a každý krok taktu. */
     static final class Bar {
-        final float[][] hits = new float[SOUNDS][16];
+        final float[][] hits;
 
-        /** Zápis „K X.......x.X.....“: písmeno nástroja, potom 16 znakov; X silno, x stredne, o jemne. */
-        static Bar of(String... lines) {
-            Bar b = new Bar();
+        Bar(int steps) {
+            hits = new float[SOUNDS][steps];
+        }
+
+        /** Zápis „K X.......x.X.....“: písmeno nástroja, potom kroky; X silno, x stredne, o jemne. */
+        static Bar of(int steps, String... lines) {
+            Bar b = new Bar(steps);
             for (String line : lines) {
                 int sound = "KSRHOCDABFP".indexOf(line.charAt(0));
-                String steps = line.substring(2);
-                for (int i = 0; i < 16 && i < steps.length(); i++) {
-                    char c = steps.charAt(i);
+                String s = line.substring(2);
+                for (int i = 0; i < steps && i < s.length(); i++) {
+                    char c = s.charAt(i);
                     b.hits[sound][i] = c == 'X' ? 1f : c == 'x' ? 0.72f : c == 'o' ? 0.42f : 0f;
                 }
             }
@@ -54,59 +60,94 @@ final class Drums {
     }
 
     static final class Style {
-        final Bar[] grooves;
-        final Bar fill;
+        final String name;
+        /** Doby v takte a kroky na dobu (4 = šestnástiny; pri 6/8 je doba bodkovaná štvrťová a krok osmina). */
+        final int beats, perBeat;
         /** Oneskorenie párnych osmín (0 = rovno, 0,67 = triolový pocit). */
         final float swing;
-        /** Hlasitosť štýlu, aby boli štýly rovnako hlasné (reggae má málo úderov). */
-        float gain = 1;
+        /** Hlasitosť štýlu, aby boli štýly rovnako hlasné. */
+        final float gain;
+        final Bar fill;
+        final Bar[] grooves;
 
-        Style(float swing, Bar fill, Bar... grooves) {
+        Style(String name, int beats, int perBeat, float swing, float gain, String[] fill, String[]... grooves) {
+            this.name = name;
+            this.beats = beats;
+            this.perBeat = perBeat;
             this.swing = swing;
-            this.fill = fill;
-            this.grooves = grooves;
+            this.gain = gain;
+            this.fill = Bar.of(beats * perBeat, fill);
+            this.grooves = new Bar[grooves.length];
+            for (int i = 0; i < grooves.length; i++) this.grooves[i] = Bar.of(beats * perBeat, grooves[i]);
         }
+
+        int steps() {
+            return beats * perBeat;
+        }
+    }
+
+    static String[] l(String... s) {
+        return s;
     }
 
     // Nástroje v zápise: K kopák, S rytmičák, R obruč, H hi-hat, O otvorený hi-hat, C činel,
     // D ride, A/B/F tomy (vysoký, stredný, kotol), P paličky.
     static final Style[] PATTERNS = {
-            new Style(0,
-                    Bar.of("H X.x.x.x.", "S ....X...X.x.....", "B ............Xx..", "F ..............XX",
-                            "K X.......X......."),
-                    Bar.of("H X.x.X.x.X.x.X.x.", "S ....X.......X...", "K X.......X.X....."),
-                    Bar.of("H X.x.X.x.X.x.X.x.", "S ....X.......X...", "K X.......X.X...x.")),
-            new Style(0,
-                    Bar.of("D X...X...", "S ....X...XxXx....", "A ............Xx..", "F ..............XX",
-                            "K xxxxxxxxxxxxxxxx"),
-                    Bar.of("D X.x.X.x.X.x.X.x.", "S ....X.......X...", "K xxxxxxxxxxxxxxxx")),
-            new Style(0.67f,
-                    Bar.of("H x.x.x.x.", "K ........X.......", "S ........X.x.....", "A ............X...",
-                            "F ..............X."),
-                    Bar.of("H x.X.x.X.x.X.x.X.", "R ........X.......", "K ........X.......", "O ..............o."),
-                    Bar.of("H x.X.x.X.x.X.x.X.", "R ........X.......", "K ........X.......")),
-            new Style(0,
-                    Bar.of("H o.o.o.o.", "K X.......X.......", "S ........o.x.....", "A ............x.x.",
-                            "F ..............xx"),
-                    Bar.of("H o.o.o.o.o.o.o.o.", "R ....x.......x...", "K X.....o.X......."),
-                    Bar.of("H o.o.o.o.o.o.o.o.", "R ....x.......x...", "K X.....o.X.....o.")),
+            new Style("Rock", 4, 4, 0, 1f,
+                    l("H X.x.x.x.", "S ....X...X.x.....", "B ............Xx..", "F ..............XX", "K X.......X......."),
+                    l("H X.x.X.x.X.x.X.x.", "S ....X.......X...", "K X.......X.X....."),
+                    l("H X.x.X.x.X.x.X.x.", "S ....X.......X...", "K X.......X.X...x.")),
+            new Style("Metal", 4, 4, 0, 0.7f,
+                    l("D X...X...", "S ....X...XxXx....", "A ............Xx..", "F ..............XX", "K xxxxxxxxxxxxxxxx"),
+                    l("D X.x.X.x.X.x.X.x.", "S ....X.......X...", "K xxxxxxxxxxxxxxxx")),
+            new Style("Reggae", 4, 4, 0.67f, 1.8f,
+                    l("H x.x.x.x.", "K ........X.......", "S ........X.x.....", "A ............X...", "F ..............X."),
+                    l("H x.X.x.X.x.X.x.X.", "R ........X.......", "K ........X.......", "O ..............o."),
+                    l("H x.X.x.X.x.X.x.X.", "R ........X.......", "K ........X.......")),
+            new Style("Balada", 4, 4, 0, 1.45f,
+                    l("H o.o.o.o.", "K X.......X.......", "S ........o.x.....", "A ............x.x.", "F ..............xx"),
+                    l("H o.o.o.o.o.o.o.o.", "R ....x.......x...", "K X.....o.X......."),
+                    l("H o.o.o.o.o.o.o.o.", "R ....x.......x...", "K X.....o.X.....o.")),
+            new Style("Blues shuffle", 4, 4, 0.67f, 1.25f,
+                    l("D X.x.X.x.", "S ....X...X.x.X.XX", "K X.......X.......", "F ..............X."),
+                    l("D X.x.X.x.X.x.X.x.", "S ....X.......X...", "K X.......X.....x."),
+                    l("H X.x.X.x.X.x.X.x.", "S ....X.......X...", "K X.....x.X.......")),
+            new Style("Funk", 4, 4, 0, 1.1f,
+                    l("H x.x.x.x.", "S ....X...XoXoXxXX", "K X.....x.........", "A ............X...", "F ..............X."),
+                    l("H xoxoxoxoxoxoxoxo", "S ....X..o.o..X..o", "K X.....X...X..X.."),
+                    l("H xoxoxoxoxoxoxoxo", "S ....X..o.o..X...", "K X.X...X.....X...")),
+            new Style("Punk", 4, 4, 0, 0.8f,
+                    l("D x.x.x.x.", "S ........XxXxXxXx", "K X...X...X.......", "F ..............X."),
+                    l("D x.x.x.x.x.x.x.x.", "S ..X...X...X...X.", "K X...X...X...X...")),
+            new Style("6/8", 2, 3, 0, 1.3f,
+                    l("H x..", "S ..xxX.", "K X.....", "F .....X"),
+                    l("H XxxXxx", "S ...X..", "K X....."),
+                    l("H XxxXxx", "S ...X..", "K X...x.")),
+            new Style("3/4", 3, 4, 0, 1.3f,
+                    l("H X.x.", "S ....X.X.XXXX", "K X...........", "F ..........XX"),
+                    l("H X.x.x.x.x.x.", "S ....X...X...", "K X..........."),
+                    l("H X.x.x.x.x.x.", "S ....X...X...", "K X.......x...")),
     };
 
+    static final String[] STYLES = new String[PATTERNS.length];
+
     static {
-        PATTERNS[1].gain = 0.7f;
-        PATTERNS[2].gain = 1.8f;
-        PATTERNS[3].gain = 1.45f;
+        for (int i = 0; i < PATTERNS.length; i++) STYLES[i] = PATTERNS[i].name;
     }
 
-    private static final Bar COUNT_IN = Bar.of("P X...x...x...x...");
-    private static final float[] LEVEL = {1f, 0.9f, 0.8f, 0.55f, 0.5f, 0.6f, 0.45f, 0.85f, 0.85f, 0.9f, 0.8f};
+    static int styleIndex(String name) {
+        for (int i = 0; i < STYLES.length; i++) if (STYLES[i].equals(name)) return i;
+        return -1;
+    }
+
+    private static final float[] LEVEL = {1f, 0.9f, 0.8f, 0.55f, 0.5f, 0.6f, 0.45f, 0.85f, 0.85f, 0.9f, 0.8f, 0.5f, 0.4f};
 
     private static short[][] sounds;
 
-    static synchronized void load(Context c) {
-        if (sounds != null) return;
+    static synchronized short[][] load(Context c) {
+        if (sounds != null) return sounds;
         short[][] s = new short[SOUNDS][];
-        for (int i = 0; i < SOUNDS; i++) {
+        for (int i = 0; i < RAW.length; i++) {
             try (InputStream in = c.getResources().openRawResource(RAW[i])) {
                 byte[] b = new byte[64 * 1024];
                 java.io.ByteArrayOutputStream all = new java.io.ByteArrayOutputStream();
@@ -117,7 +158,19 @@ final class Drums {
                 s[i] = new short[0];
             }
         }
+        s[CLICK_HI] = click(1760);
+        s[CLICK_LO] = click(1100);
         sounds = s;
+        return s;
+    }
+
+    static short[] click(double freq) {
+        short[] s = new short[RATE * 30 / 1000];
+        for (int i = 0; i < s.length; i++) {
+            double t = i / (double) RATE;
+            s[i] = (short) (Math.sin(2 * Math.PI * freq * t) * Math.exp(-t * 120) * 0.9 * 32767);
+        }
+        return s;
     }
 
     static short[] toShorts(byte[] b) {
@@ -126,17 +179,26 @@ final class Drums {
         return s;
     }
 
+    /** Mäkké obmedzenie (súčet zvukov neprebudí); vstup aj výstup okolo ±1. */
+    static short soft(float mix) {
+        float x = Math.max(-1.5f, Math.min(1.5f, mix));
+        return (short) ((x - x * x * x / 6.75f) * 30000);
+    }
+
     /**
      * Skladá zvuk: posúva sa po dobách a spúšťa údery. Bez Androidu, aby sa dal vyskúšať v testoch.
      */
     static final class Sequencer {
         final short[][] kit;
-        volatile int style, fillBars = 8;
+        volatile int style, fillBars = 8, mode = DRUMS;
+        /** Doby v takte metronómu. */
+        volatile int clickBeats = 4;
         volatile float bpm = 100, volume = 0.8f;
         /** Poloha v dobách (0 = prvá doba prvého taktu; záporné = odpočet). */
         double beat;
         boolean countIn;
         private long next;
+        private int lastStyle = -1, lastMode = -1;
         private final short[][] voice = new short[24][];
         private final int[] voicePos = new int[24], voiceSound = new int[24];
         private final float[] voiceGain = new float[24];
@@ -147,33 +209,70 @@ final class Drums {
             this.kit = kit;
         }
 
+        Style current() {
+            return PATTERNS[Math.max(0, Math.min(style, PATTERNS.length - 1))];
+        }
+
+        /** Doby v takte toho, čo práve hrá (metronóm má vlastné). */
+        int beatsPerBar() {
+            return mode == DRUMS ? current().beats : Math.max(1, clickBeats);
+        }
+
+        int perBeat() {
+            return mode == DRUMS ? current().perBeat : 1;
+        }
+
         /** Skok na danú dobu (začiatok, odpočet, posun prehrávania). */
         void seek(double toBeat) {
             beat = toBeat;
-            Style s = PATTERNS[style];
-            long n = (long) Math.floor(toBeat * 4);
-            while (time(n, s) < toBeat - 1e-9) n++;
+            lastStyle = style;
+            lastMode = mode;
+            int p = perBeat();
+            long n = (long) Math.floor(toBeat * p);
+            while (time(n) < toBeat - 1e-9) n++;
             next = n;
         }
 
-        /** Kedy (v dobách) zaznie šestnástina n; párne osminy sa pri swingu oneskoria. */
-        static double time(long n, Style s) {
-            return n / 4.0 + (Math.floorMod(n, 4) == 2 ? s.swing * 0.25 : 0);
+        /** Kedy (v dobách) zaznie krok n; párne osminy sa pri swingu oneskoria. */
+        double time(long n) {
+            int p = perBeat();
+            float swing = mode == DRUMS && p == 4 ? current().swing : 0;
+            return n / (double) p + (p == 4 && Math.floorMod(n, 4) == 2 ? swing * 0.25 : 0);
+        }
+
+        /** Na ktorej dobe začína takt, v ktorom je doba b (pri odpočte takty idú od -1). */
+        double barStart(double b) {
+            int bpb = beatsPerBar();
+            return Math.floor(b / bpb) * bpb;
         }
 
         Bar barFor(long bar) {
-            Style s = PATTERNS[style];
-            if (bar < 0) return countIn ? COUNT_IN : s.grooves[0];
+            Style s = current();
+            if (bar < 0) return countIn ? null : s.grooves[0];
             int every = fillBars;
             if (every > 0 && bar % every == every - 1) return s.fill;
             return s.grooves[(int) ((bar / 2) % s.grooves.length)];
         }
 
         private void trigger(long n) {
-            long bar = Math.floorDiv(n, 16);
-            int step = (int) Math.floorMod(n, 16);
+            int p = perBeat(), bpb = beatsPerBar(), steps = bpb * p;
+            long bar = Math.floorDiv(n, steps);
+            int step = (int) Math.floorMod(n, steps);
+            if (bar < 0 && countIn) {
+                // Odpočet: paličky na každú dobu (metronóm cvaká).
+                if (step % p == 0) {
+                    if (mode == CLICK) play(step == 0 ? CLICK_HI : CLICK_LO, 1f);
+                    else play(STICK, step == 0 ? 1f : 0.72f);
+                }
+                return;
+            }
+            if (mode == OFF) return;
+            if (mode == CLICK) {
+                play(step == 0 ? CLICK_HI : CLICK_LO, 1f);
+                return;
+            }
             Bar b = barFor(bar);
-            for (int i = 0; i < SOUNDS; i++) {
+            for (int i = 0; i < STICK; i++) {
                 float v = b.hits[i][step];
                 if (i == CRASH && step == 0 && bar >= 0 && (bar == 0 || (fillBars > 0 && bar % fillBars == 0))) {
                     v = Math.max(v, 0.9f);
@@ -199,6 +298,7 @@ final class Drums {
                 }
                 if (voicePos[k] > voicePos[free]) free = k;
             }
+            if (kit[sound] == null || kit[sound].length == 0) return;
             voice[free] = kit[sound];
             voicePos[free] = 0;
             voiceSound[free] = sound;
@@ -206,32 +306,38 @@ final class Drums {
             voiceFade[free] = 0;
         }
 
-        /** Vyplní out ďalšími vzorkami; rate = koľko dôb pribudne za vzorku je bpm·rýchlosť/60/RATE. */
-        void render(short[] out, int n, float speed) {
-            Style s = PATTERNS[style];
+        /** Ďalšie vzorky (pred obmedzením, okolo ±1) pripočíta k out. */
+        void mix(float[] out, int n, float speed) {
+            if (style != lastStyle || mode != lastMode) seek(beat);
+            float g = volume * 1.9f * (mode == DRUMS ? current().gain : 1f) / 32768f;
             double perSample = bpm * speed / 60.0 / RATE;
             for (int i = 0; i < n; i++) {
-                while (time(next, s) <= beat + 1e-9) {
+                while (time(next) <= beat + 1e-9) {
                     trigger(next);
                     next++;
                 }
                 beat += perSample;
-                float mix = 0;
+                float m = 0;
                 for (int k = 0; k < voice.length; k++) {
                     short[] v = voice[k];
                     if (v == null) continue;
-                    mix += v[voicePos[k]++] * voiceGain[k];
+                    m += v[voicePos[k]++] * voiceGain[k];
                     if (voiceFade[k] > 0) voiceGain[k] -= voiceFade[k];
                     if (voicePos[k] >= v.length || voiceGain[k] <= 0) voice[k] = null;
                 }
-                mix *= volume * 1.9f * s.gain / 32768f;
-                // Mäkké obmedzenie, aby súčet úderov neprebudil
-                float x = Math.max(-1.5f, Math.min(1.5f, mix));
-                float y = x - x * x * x / 6.75f;
-                out[i] = (short) (y * 30000);
+                out[i] += m * g;
             }
         }
+
+        /** Vyplní out ďalšími vzorkami. */
+        void render(short[] out, int n, float speed) {
+            float[] f = new float[n];
+            mix(f, n, speed);
+            for (int i = 0; i < n; i++) out[i] = soft(f[i]);
+        }
     }
+
+    // ---- Prehrávač ----
 
     private volatile boolean running;
     private Thread thread;
@@ -239,38 +345,47 @@ final class Drums {
     private volatile Output track;
     private volatile Clock clock;
     private volatile double firstBeatMs;
-    // Ktorej dobe zodpovedá ktorá vzorka poslaná do zvuku (na zistenie, kde v takte práve je).
+    /** Koľko rámcov (48 kHz) už prehrávač poslal; časová os loopera. */
+    private volatile long written;
+    // Ktorej dobe zodpovedá ktorý rámec (pri zmene tempa sa posunie).
     private long anchorFrame;
     private double anchorBeat, beatsPerFrame;
 
-    volatile int style, fillBars = 8;
+    volatile int style, fillBars = 8, mode = DRUMS, clickBeats = 4;
     volatile float bpm = 100, volume = 0.8f;
+
+    /** Slučka loopera: mono 48 kHz, index 0 zaznie na rámci loopStart; null = žiadna. */
+    volatile float[] loop;
+    volatile long loopStart;
+    volatile float loopGain = 1f;
 
     boolean running() {
         return running;
     }
 
-    /** Hrá samo; s odpočtom paličkami (jeden takt) pred prvou dobou. */
-    void start(Context c, Output out, boolean countIn) {
+    /** Hrá samo (metronóm, bicie alebo len slučka); s odpočtom jedného taktu pred prvou dobou. */
+    void start(Context c, Output out, int mode, boolean countIn) {
         stop();
-        load(c);
         clock = null;
-        Sequencer s = new Sequencer(sounds);
+        this.mode = mode;
+        Sequencer s = new Sequencer(load(c));
         s.countIn = countIn;
         configure(s);
-        s.seek(countIn ? -4 : 0);
+        s.seek(countIn ? -s.beatsPerBar() : 0);
+        // Slučka loopera začína na prvej dobe novej časovej osi.
+        if (loop != null) loopStart = countIn ? Math.round(s.beatsPerBar() * 60.0 / bpm * RATE) : 0;
         begin(s, out);
     }
 
     /** Ide za prehrávanou nahrávkou; firstBeatMs = kde v nej je prvá doba taktu. */
     void follow(Context c, Output out, Clock source, double firstBeatMs) {
         stop();
-        load(c);
         clock = source;
         this.firstBeatMs = firstBeatMs;
-        Sequencer s = new Sequencer(sounds);
+        mode = DRUMS;
+        Sequencer s = new Sequencer(load(c));
         configure(s);
-        s.seek(target(source));
+        s.seek(target(source, 0));
         begin(s, out);
     }
 
@@ -278,15 +393,18 @@ final class Drums {
         return running && clock != null;
     }
 
+    /** Hrá sám (nie za nahrávkou) a niečo počuť (metronóm alebo bicie). */
+    boolean playing(int what) {
+        return running && clock == null && mode == what;
+    }
+
     private void configure(Sequencer s) {
         s.style = Math.max(0, Math.min(style, PATTERNS.length - 1));
         s.fillBars = fillBars;
         s.bpm = bpm;
         s.volume = volume;
-    }
-
-    private double target(Clock c) {
-        return target(c, 0);
+        s.mode = mode;
+        s.clickBeats = clickBeats;
     }
 
     /** Doba v nahrávke o aheadMs neskôr (keď zaznie to, čo sa práve posiela). */
@@ -301,6 +419,7 @@ final class Drums {
 
     private void begin(Sequencer s, Output out) {
         seq = s;
+        written = 0;
         running = true;
         thread = new Thread(() -> loop(s, out), "bicie");
         thread.start();
@@ -318,21 +437,59 @@ final class Drums {
         }
     }
 
+    /** Pre testy: prehrávač „hrá“ do daného výstupu v tempe bpm bez vlastného vlákna. */
+    void attachForTest(Output out, float bpm, int clickBeats) {
+        this.bpm = bpm;
+        this.clickBeats = clickBeats;
+        mode = CLICK;
+        Sequencer s = new Sequencer(new short[SOUNDS][0]);
+        configure(s);
+        seq = s;
+        track = out;
+        running = true;
+        synchronized (this) {
+            anchorFrame = 0;
+            anchorBeat = 0;
+            beatsPerFrame = bpm / 60.0 / RATE;
+        }
+    }
+
+    /** Rámec (48 kHz na osi prehrávača), ktorý práve znie; -1, ak nehrá. */
+    long heardFrame() {
+        Output t = track;
+        return running && t != null ? t.played() : -1;
+    }
+
+    /** Ktorá doba zaznie na rámci f. */
+    synchronized double beatAt(long f) {
+        return anchorBeat + (f - anchorFrame) * beatsPerFrame;
+    }
+
+    /** Na ktorom rámci zaznie doba b. */
+    synchronized long frameAt(double b) {
+        return anchorFrame + Math.round((b - anchorBeat) / beatsPerFrame);
+    }
+
+    int beatsPerBar() {
+        Sequencer s = seq;
+        return s == null ? 4 : s.beatsPerBar();
+    }
+
     /**
-     * Na ktorej dobe (od prvej doby po štarte) práve je to, čo z telefónu znie; NaN, ak bicie nehrajú.
+     * Na ktorej dobe (od prvej doby po štarte) práve je to, čo znie; NaN, ak prehrávač nehrá sám.
      * Podľa toho sa k nahrávke uloží, kde v nej začína takt.
      */
-    synchronized double audibleBeat() {
-        Output t = track;
-        if (!running || t == null || clock != null) return Double.NaN;
-        long head = t.played();
-        return anchorBeat + (head - anchorFrame) * beatsPerFrame;
+    double audibleBeat() {
+        if (!running || clock != null) return Double.NaN;
+        long f = heardFrame();
+        return f < 0 ? Double.NaN : beatAt(f);
     }
 
     private void loop(Sequencer s, Output t) {
         track = t;
-        short[] chunk = new short[RATE / 100];
-        long written = 0;
+        int n = RATE / 100;
+        short[] chunk = new short[n];
+        float[] mix = new float[n];
         float lastBpm = -1;
         try {
             while (running) {
@@ -340,13 +497,15 @@ final class Drums {
                 s.style = style;
                 s.fillBars = fillBars;
                 s.volume = volume;
+                s.mode = mode;
+                s.clickBeats = clickBeats;
                 Clock c = clock;
                 float speed = 1;
                 if (c != null) {
                     if (!c.playing()) {
                         java.util.Arrays.fill(chunk, (short) 0);
-                        t.write(chunk, chunk.length);
-                        written += chunk.length;
+                        t.write(chunk, n);
+                        written += n;
                         continue;
                     }
                     speed = c.speed();
@@ -364,9 +523,20 @@ final class Drums {
                         beatsPerFrame = bpm / 60.0 / RATE;
                     }
                 }
-                s.render(chunk, chunk.length, speed);
-                t.write(chunk, chunk.length);
-                written += chunk.length;
+                java.util.Arrays.fill(mix, 0f);
+                s.mix(mix, n, speed);
+                float[] lp = loop;
+                if (lp != null && lp.length > 0 && c == null) {
+                    float g = loopGain;
+                    long start = loopStart;
+                    for (int i = 0; i < n; i++) {
+                        long f = written + i;
+                        if (f >= start) mix[i] += lp[(int) ((f - start) % lp.length)] * g;
+                    }
+                }
+                for (int i = 0; i < n; i++) chunk[i] = soft(mix[i]);
+                t.write(chunk, n);
+                written += n;
             }
         } finally {
             track = null;

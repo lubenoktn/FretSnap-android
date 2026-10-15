@@ -79,6 +79,45 @@ public class DrumsTest {
     }
 
     @Test
+    public void sixEightHasThreeEighthsPerBeat() {
+        Drums.Sequencer s = new Drums.Sequencer(kit());
+        s.style = Drums.styleIndex("6/8");
+        s.fillBars = 0;
+        s.bpm = 60;
+        s.volume = 1;
+        s.seek(0);
+        assertEquals(2, s.beatsPerBar());
+        // hi-hat na každej osmine: 48000 / 3 = 16000 vzoriek
+        List<Integer> at = onsets(s, 96000, 1);
+        assertEquals(6, at.size());
+        assertEquals(16000, (int) at.get(1));
+    }
+
+    @Test
+    public void waltzBarHasThreeBeats() {
+        Drums.Sequencer s = new Drums.Sequencer(kit());
+        s.style = Drums.styleIndex("3/4");
+        assertEquals(3, s.beatsPerBar());
+        assertEquals(9, Drums.STYLES.length);
+    }
+
+    @Test
+    public void metronomeClicksEveryBeatWithAccent() {
+        short[][] k = kit();
+        Drums.Sequencer s = new Drums.Sequencer(k);
+        s.mode = Drums.CLICK;
+        s.clickBeats = 3;
+        s.bpm = 120;
+        s.volume = 1;
+        s.seek(0);
+        short[] out = new short[24000 * 4];
+        s.render(out, out.length, 1);
+        assertTrue(out[0] > out[24000]);
+        assertTrue(out[24000] != 0 && out[48000] != 0);
+        assertTrue(out[72000] > out[24000]);
+    }
+
+    @Test
     public void firstBeatAfterStart() {
         assertEquals(0, MainActivity.firstBeatMs(0, 120));
         assertEquals(0, MainActivity.firstBeatMs(8, 120));
@@ -87,5 +126,7 @@ public class DrumsTest {
         // počas odpočtu (beat -1): prvá doba o jednu dobu neskôr
         assertEquals(500, MainActivity.firstBeatMs(-1, 120));
         assertEquals(250, MainActivity.firstBeatMs(3.5, 120));
+        // 3/4: z doby 1 sú do ďalšieho taktu dve doby
+        assertEquals(1000, MainActivity.firstBeatMs(1, 120, 3));
     }
 }

@@ -56,6 +56,13 @@ final class Engine {
     volatile Listener listener;
     /** Ladička dostáva ten istý prúd vzoriek; null, keď je vypnutá. */
     volatile Tuner tuner;
+
+    /** Kto ešte počúva vstup (looper, automatické nahrávanie); volá sa z vlákna vstupu. */
+    interface Tap {
+        void onAudio(int[] buf, int n, int channels, int rate);
+    }
+
+    volatile Tap tap;
     private volatile float gain = 1f;
     private volatile boolean running;
     private Thread thread;
@@ -215,6 +222,8 @@ final class Engine {
                 Source.peaks(buf, n, c.channels, peak);
                 Tuner t = tuner;
                 if (t != null) t.feed(buf, n, c.channels, c.rate);
+                Tap tp = tap;
+                if (tp != null) tp.onAudio(buf, n, c.channels, c.finalRate());
                 if (now - last > 80) {
                     last = now;
                     l = listener;
@@ -246,9 +255,26 @@ final class Engine {
 
     /** Začne zapisovať prúd do súboru. */
     synchronized void startRecording(File f) throws IOException {
+        startRecording(f, 0);
+    }
+
+    /** Začne zapisovať; na začiatok dá posledných preSeconds z pamäte (automatické nahrávanie nestratí prvý tón). */
+    synchronized void startRecording(File f, double preSeconds) throws IOException {
         if (source == null) throw new IOException("Vstup ešte nebeží.");
         writer = new Wav.Writer(f, source.channels, source.rate);
-        recordingSince = System.currentTimeMillis();
+        long pre = 0;
+        if (preSeconds > 0 && history != null) {
+            int ch = channels;
+            pre = Math.min(Math.min(historyFrames, history.length / ch), Math.round(source.rate * preSeconds));
+            int samples = (int) (pre * ch);
+            int[] copy = new int[samples];
+            int start = Math.floorMod(historyPos - samples, history.length);
+            int first = Math.min(samples, history.length - start);
+            System.arraycopy(history, start, copy, 0, first);
+            if (first < samples) System.arraycopy(history, 0, copy, first, samples - first);
+            writer.write(copy, 0, samples);
+        }
+        recordingSince = System.currentTimeMillis() - pre * 1000 / Math.max(1, source.rate);
     }
 
     /** Ukončí zápis a doplní hlavičku; vráti null, ak sa nenahrávalo. */

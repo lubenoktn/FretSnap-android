@@ -511,16 +511,17 @@ Java_sk_lubeno_riffy_UsbAudio_nativeOutWrite(JNIEnv *env, jclass cls, jlong hand
     return result;
 }
 
-/** Odoslané požiadavky, odoslané rámce, prázdne pakety, chyby, prijatá spätná väzba, rámce na paket ×1000, beží. */
+/** Odoslané požiadavky, odoslané rámce, prázdne pakety, chyby, prijatá spätná väzba, rámce na paket ×1000, beží,
+ *  bajty čakajúce v zásobe. */
 JNIEXPORT jlongArray JNICALL
 Java_sk_lubeno_riffy_UsbAudio_nativeOutStats(JNIEnv *env, jclass cls, jlong handle) {
     Stream *s = (Stream *) (intptr_t) handle;
     pthread_mutex_lock(&s->lock);
     double per = s->outFeedback > 0 ? s->outFeedback : s->outNominal;
-    jlong v[7] = {s->outSent, s->outFrames, s->outEmpty, s->outErrors, s->fbCount, (jlong) (per * 1000),
-                  s->outRunning && s->inflight > 0};
+    jlong v[8] = {s->outSent, s->outFrames, s->outEmpty, s->outErrors, s->fbCount, (jlong) (per * 1000),
+                  s->outRunning && s->inflight > 0, (jlong) (s->outHead - s->outTail)};
     pthread_mutex_unlock(&s->lock);
-    jlongArray a = (*env)->NewLongArray(env, 7);
-    (*env)->SetLongArrayRegion(env, a, 0, 7, v);
+    jlongArray a = (*env)->NewLongArray(env, 8);
+    (*env)->SetLongArrayRegion(env, a, 0, 8, v);
     return a;
 }
